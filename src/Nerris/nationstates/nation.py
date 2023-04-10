@@ -5,3 +5,4 @@ class Nation:
     name: str
     url_name: str
     region: str
+    region_url_name: str

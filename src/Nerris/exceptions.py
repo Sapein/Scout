@@ -1,11 +1,28 @@
-class NoMeaning(Exception):
+class InvalidMeaning(Exception):
     pass
 
-class NoGuild(Exception):
+class InvalidGuild(Exception):
     pass
 
 class InvalidRole(Exception):
     pass
 
+
 class NoRoles(Exception):
+    pass
+
+class NoGuilds(Exception):
+    pass
+
+class NoMeanings(Exception):
+    pass
+
+class NoNation(Exception):
+    pass
+
+
+class InvalidCode_NSVerify(Exception):
+    pass
+
+class NoCode_NSVerify(Exception):
     pass

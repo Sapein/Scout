@@ -64,7 +64,7 @@ class Nation(Base):
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     name: Mapped[str]
     url_name: Mapped[str]
-    region_id: Mapped[Optional[int]] = mapped_column(ForeignKey("regions.id"))
+    region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"))
 
 
     # user: Mapped["User"] = relationship(secondary=UserNation)

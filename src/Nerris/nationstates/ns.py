@@ -46,12 +46,20 @@ class NationStatesClient:
             return "https://nationstates.net/page=verify_login"
         return "https://nationstates.net/page=verify_login?token={}".format(token)
 
+    async def get_nation(self, nation: str) -> Nation:
+        url = '{}{}'.format(base_url, nation_shard.format(nation.replace(" ", "_").casefold()))
+
+        response = await self._make_request(verify, self.headers)
+        name = response.split("<NAME>")[1].split("</NAME>")[0]
+        region = response.split("<REGION>")[1].split("</REGION>")[0]
+        return Nation(name, nation.replace(" ", "_").casefold(), region, region.replace(" ", "_").casefold())
+
     async def verify(self, nation: Nation | str, code: str, token: Optional[str] = None) -> tuple[Nation, bool]:
         verify = '{}{}'.format(self.base_url, self.verify_shard)
         try:
-            verify = verify.format(nation.name.replace(" ", "_"), code)
+            verify = verify.format(nation.name.replace(" ", "_").casefold(), code)
         except AttributeError:
-            verify = verify.format(nation.replace(" ", "_"), code)
+            verify = verify.format(nation.replace(" ", "_").casefold(), code)
 
         verify = '{}&q=name+region'.format(verify)
 
@@ -59,11 +67,11 @@ class NationStatesClient:
             verify = '{}&token={}'.format(verify, token)
 
         response = await self._make_request(verify, self.headers)
-        print(response)
         name = response.split("<NAME>")[1].split("</NAME>")[0]
         region = response.split("<REGION>")[1].split("</REGION>")[0]
         verified = response.split("<VERIFY>")[1].split("</VERIFY>")[0]
-        return bool(int(verified)), Nation(name, nation, region)
+        nation = Nation(name, nation.replace(" ", "_").casefold(), region, region.replace(" ", "_").casefold())
+        return bool(int(verified)), nation
 
     async def _make_request(self, url, headers) -> str:
         if self.requests.remaining > 0 and self.requests.retry_after is None:
@@ -72,14 +80,14 @@ class NationStatesClient:
                 if response.status != 429:
                     return await response.text()
                 else:
-                    return await _make_reqeust(self, url, headers)
+                    return await self._make_request(url, headers)
         else:
             if self.requests.retry_after is not None:
-                await asyncio.sleep(retry_after)
+                await asyncio.sleep(self.requests.retry_after)
                 self.requests.retry_after = None
                 return await self._make_request(url, headers)
             else:
-                sleep_time = datetime.utcnow() - last_request
+                sleep_time = datetime.utcnow() - self.requests.last_request
                 await asyncio.sleep(sleep_time)
                 self.requests.remaining = self.requests.limit
                 self.requests.request_count = 0
