@@ -14,6 +14,9 @@ class NoRoles(Exception):
 class NoGuilds(Exception):
     pass
 
+class NoRegions(Exception):
+    pass
+
 class NoMeanings(Exception):
     pass
 
@@ -25,4 +28,7 @@ class InvalidCode_NSVerify(Exception):
     pass
 
 class NoCode_NSVerify(Exception):
+    pass
+
+class NotInGuild(Exception):
     pass
