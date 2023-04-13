@@ -51,9 +51,9 @@ class NerrisBot(commands.Bot):
 
     def register_meanings(self):
         with Session(self.db_engine) as session:
-            if (meanings := session.scalars(select(tbl.Meanings)).all()):
-                self.meaining_ids[RoleTypes.VERIFIED.value] = [m.id for m in meanings if m.meaning.casefold() == RoleTypes.VERIFIED.value.casefold()]
-                self.meaining_ids[RoleTypes.RESIDENT.value] = [m.id for m in meanings if m.meaning.casefold() == RoleTypes.RESIDENT.value.casefold()]
+            if (meanings := session.scalars(select(tbl.Meaning)).all()):
+                self.meaning_ids[RoleTypes.VERIFIED.value] = [m.id for m in meanings if m.meaning.casefold() == RoleTypes.VERIFIED.value.casefold()][0]
+                self.meaning_ids[RoleTypes.RESIDENT.value] = [m.id for m in meanings if m.meaning.casefold() == RoleTypes.RESIDENT.value.casefold()][0]
                 return
 
             verified_role = tbl.Meaning(meaning=RoleTypes.VERIFIED.value)
@@ -65,50 +65,31 @@ class NerrisBot(commands.Bot):
             self.meaning_ids[RoleTypes.RESIDENT.value] = resident_role.id
 
     def store_role(self, session: Session, role: discord.Role, guild: discord.Guild) -> Self:
-        guild_id = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == guild.id))
-        if not guild_id:
+        guild_db = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == guild.id))
+        if not guild_db:
             raise InvalidGuild(guild)
-        new_role = tbl.Role(snowflake = role.id, guild_id=guild_id.id)
+
+        new_role = tbl.Role(snowflake = role.id, guild_id=guild_db.id, guild=guild_db)
         session.add(new_role)
         session.commit() #flush?
         return self
 
     def add_role_meaning(self, session: Session, role: discord.Role, guild: discord.Guild, meaning: RoleTypes) -> Self:
-        _meaning = session.scalar(select(tbl.Meaning.id).where(tbl.Meaning.meaning == meaning.value))
-
-        if not _meaning:
+        if meaning.value not in self.meaning_ids:
             raise InvalidMeaning(meaning)
-        meaning = _meaning
 
-        _guild = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == guild.id))
-        if not _guild:
+        guild_db = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == guild.id))
+        if not guild_db:
             raise InvalidGuild(guild)
-        guild = _guild
 
-        _role = session.scalar(select(tbl.Role).where(tbl.Role.snowflake == role.id and tbl.Role.guild_id == guild.id))
-        if not _role:
+        if role.id not in [r.snowflake for r in guild_db.roles]:
             raise InvalidRole(role)
-        role = _role
 
-        role_meaning = tbl.RoleMeaning(meaning_id = meaning, role_id = role.id)
-        session.add(role_meaning)
+        role = [r for r in guild_db.roles if r.snowflake == role.id][0]
+        meaning = session.scalar(select(tbl.Meaning).where(tbl.Meaning.id == self.meaning_ids[meaning.value]))
+        role.meanings.add(meaning)
         session.commit() #flush?
         return self
-
-
-    @staticmethod
-    def store_nation(session: Session, user_id: str, nation: Nation, region_id: int) -> tuple[tbl.User, tbl.Nation]:
-        new_user = tbl.User(snowflake=user_id)
-        new_nation = tbl.Nation(name=nation.name, url_name=nation.url_name, region_id=region_id)
-        session.add(new_user)
-        session.add(new_nation)
-        session.commit() #flush?
-        return new_user, new_nation
-
-    @staticmethod
-    def _link_nation_user(session: Session, user_id: int, nation_id: int):
-        session.add(tbl.UserNation(user_id=user_id, nation_id=nation_id))
-        session.commit() #flush?
 
     async def verify_nation(self, nation: str, code: Optional[str]) -> tuple[str, Nation]:
         if code is None:
@@ -129,123 +110,77 @@ class NerrisBot(commands.Bot):
                 session.commit()
                 region_id = new_region.id
 
-            user, nation = self.store_nation(session, message.author.id, nation, region_id)
-            self._link_nation_user(session, user.id, nation.id)
+            new_user = tbl.User(snowflake=message.author.id)
+            new_nation = tbl.Nation(name=nation.name, url_name=nation.url_name, region_id=region_id, users={new_user})
+            session.add_all([new_user, new_nation])
 
             session.commit()
             return "There we go! I'll see if I can get you some roles..."
 
-    async def _get_mutual_guilds(self, user: discord.User | discord.Member) -> tuple[dict, dict]:
-        """
-        Gets mutual guilds that the bot and the user are in.
-        """
-        guild_members = [(g, m) for g in self.guilds if (m := await g.fetch_member(user.id))]
-        mutual_guilds = {}
-        for g in self.guilds:
-            member = await g.fetch_member(user.id)
-            if member:
-                mutual_guilds[g] = member
-        return (mutual_guilds, guild_member)
+    def get_regional_role(self, guild: discord.Guild, guild_db: tbl.Guild, user_db: tbl.User) -> str:
+        shared_regions = guild_db.regions & {n.region for n in user_db.nations}
+
+        verified_role = None
+        resident_role = None
+        for role in guild_db.roles:
+            if verified_role is not None and resident_role is not None:
+                break
+
+            for meaning in role.meanings:
+                if meaning.meaning == RoleTypes.RESIDENT.value and shared_regions:
+                    return role.snowflake
+                elif meaning.meaning == RoleTypes.VERIFIED.value:
+                    if not shared_regions:
+                        return role.snowflake
+                    verified_role = role
+
+        if verified_role is not None:
+            return verified_role.snowflake
+        raise NoRoles()
+
 
     async def give_verified_roles_one_guild(self, user: discord.User | discord.Member, guild: discord.Guild):
         with Session(self.db_engine) as session:
-            if not session.scalars(select(tbl.Role)).all():
-                raise NoRoles()
+            if isinstance(user, discord.User) or user.guild != guild:
+                user = guild.fetch_member(user.id)
 
-
-            member = guild.fetch_member(user.id)
-            if not member:
+            if not user:
                 raise NotInGuild()
 
             guild_db = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == guild.id))
             if not guild_db:
                 raise InvalidGuild()
 
-            user_id = session.scalar(select(tbl.User.id).where(tbl.User.snowflake == user.id))
-            nation_ids = session.scalars(select(tbl.UserNation.nation_id).where(tbl.UserNation.user_id == user_id)).all()
-            if not nation_ids:
-                raise NoNation()
-
-            roles = session.scalars(select(tbl.Role).where(tbl.Role.guild_id == guild_db.id())).all()
-            if not roles:
+            if not guild_db.roles:
                 raise NoRoles()
 
-            role = roles[0]
-            # Assume we are correct at first.
-            if len(roles) == 2 or session.scalar(select(tbl.RoleMeaning).where(tbl.RoleMeaning.role_id == roles[0],
-                                                                               tbl.RoleMeaning.meaning_id == self.meaning_ids[RoleTypes.RESIDENT.value])):
-                # We need to determine residency
-                residing_region_ids = session.scalars(select(select.tbl.Nation.region_id).where(tbl.nation_id.in_(nation_ids))).all()
-                region_ids = session.scalars(select(tbl.GuildRegion.region_id).where(tbl.GuildRegion.guild_id == guild_db.id,
-                                                                                     tbl.GuildRegion.region_id.in_(residing_region_ids))).all()
-                if region_ids:
-                    role = [r for r in roles if r.meaning.casefold() == RoleTypes.RESIDENT.value.casefold()][0]
-                else if len(roles) == 2:
-                    role = [r for r in roles if r.meaning.casefold() == RoleTypes.VERIFIED.value.casefold()][0]
-                member = mutual_guilds[guild]
-            
-            await member.add_roles(discord.Object(role.snowflake))
+            user_db = session.scalar(select(tbl.User).where(tbl.User.snowflake == user.id))
+            if not user_db.nations:
+                raise NoNation()
+
+            if not guild_db.roles:
+                raise NoRoles()
+
+            await user.add_roles(discord.Object(self.get_regional_role(guild, guild_db, user_db)))
 
     async def give_verified_roles(self, user: discord.User | discord.Member):
         with Session(self.db_engine) as session:
             if not session.scalars(select(tbl.Role)).all():
                 raise NoRoles()
 
-            mutual_guilds, guild_member = self._get_mutual_guilds(user)
+            mutual_guilds = {g.id:(g, m) for g in self.guilds if (m := await g.fetch_member(user.id))}
 
-            active_guilds = session.scalars(select(tbl.Guild).where(tbl.Guild.snowflake.in_([g.id for g in mutual_guilds.keys()]))).all()
+            active_guilds = session.scalars(select(tbl.Guild.snowflake).where(tbl.Guild.snowflake.in_(mutual_guilds.keys()))).all()
             if not active_guilds:
                 raise NoGuilds()
 
-            user_id = session.scalar(select(tbl.User.id).where(tbl.User.snowflake == user.id))
-            nation_ids = session.scalars(select(tbl.UserNation.nation_id).where(tbl.UserNation.user_id == user_id)).all()
-            if not nation_ids:
-                raise NoNation
+            for guild_snowflake in active_guilds:
+                try:
+                    await self.give_verified_roles_one_guild(mutual_guilds[guild_snowflake][1], mutual_guilds[guild_snowflake][0])
+                except NotInGuild:
+                    pass
 
-
-            elligble_roles = {'verified': {}, 'resident':{}}
-
-            meaning_id = session.scalar(select(tbl.Meaning.id).where(tbl.Meaning.meaning == RoleTypes.VERIFIED.value))
-            if not meaning_id:
-                raise InvalidMeaning(RoleTypes.VERIFIED.value)
-
-            verified_role_ids = session.scalars(select(tbl.RoleMeaning.role_id).where(tbl.RoleMeaning.meaning_id == meaning_id)
-                                               ).all()
-
-            verified  = session.scalars(select(tbl.Role
-                                              ).where(tbl.Role.id.in_(verified_role_ids),
-                                                      tbl.Role.guild_id.in_([g.id for g in active_guilds]))).all()
-
-            elligble_roles['verified'] = {[g.snowflake for g in active_guilds if g.id == r.guild_id][0]: r for r in verified}
-
-            meaning_id = None
-
-            meaning_id = session.scalar(select(tbl.Meaning.id).where(tbl.Meaning.meaning == RoleTypes.RESIDENT.value))
-            if meaning_id:
-                region_ids = session.scalars(select(tbl.Nation.region_id).where(tbl.Nation.id.in_(nation_ids))).all()
-
-                resident_role_ids = session.scalars(select(tbl.RoleMeaning.role_id).where(tbl.RoleMeaning.meaning_id == meaning_id)).all()
-                resident_guild_regions = session.scalars(select(tbl.GuildRegion.guild_id).where(tbl.GuildRegion.guild_id.in_([g.id for g in active_guilds]),
-                                                                       tbl.GuildRegion.region_id.in_(region_ids))).all()
-
-                resident = session.scalars(select(tbl.Role).where(tbl.Role.id.in_(resident_role_ids),
-                                                                  tbl.Role.guild_id.in_(resident_guild_regions))).all()
-
-
-                guilds = session.scalars(select(tbl.Guild).where(tbl.Guild.id.in_(resident_guild_regions))).all()
-                elligble_roles['resident'] = {[g.snowflake for g in guilds if g.id == r.guild_id][0]: r for r in resident}
-
-                for guild in elligble_roles['resident']:
-                    if guild in elligble_roles['verified']:
-                        del elligble_roles['verified'][guild]
-
-            roles = {g: elligble_roles[k][g] for k in elligble_roles for g in elligble_roles[k]}
-            for guild in mutual_guilds:
-                member = mutual_guilds[guild]
-                await member.add_roles(discord.Object(roles[str(guild.id)].snowflake))
-
-
-    def _link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], message: discord.Message) -> str:
+    def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], message: discord.Message) -> str:
         with Session(self.db_engine) as session:
             if verified_role is None and resident_role is None:
                 raise NoRoles()
@@ -277,12 +212,9 @@ async def verified_nations(ctx, private_response: Optional[bool] = True):
     Displays Verified Nations of a given user.
     """
     with Session(nerris.db_engine) as session:
-        user_id = session.scalar(select(tbl.User.id).where(tbl.User.snowflake == ctx.message.author.id))
-        if user_id:
-            nation_ids = session.scalars(select(tbl.UserNation.nation_id).where(tbl.UserNation.user_id == user_id)).all()
-            if nation_ids:
-                nations = session.scalars(select(tbl.Nation.name).where(tbl.Nation.id.in_(nation_ids))).all()
-                await ctx.send('\n'.join(nations), ephemeral=private_response)
+        user_nations = session.scalar(select(tbl.User.nations).where(tbl.User.snowflake == ctx.message.author.id))
+        if user_nations:
+            await ctx.send('\n'.join(user_nations), ephemeral=private_response)
     await ctx.send("I don't have any nations for you!")
 
 @nerris.listen('on_member_join')
@@ -389,16 +321,12 @@ async def sync(ctx):
 async def link_region(ctx, region_name: str, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role]):
     with Session(nerris.db_engine) as session:
         new_region = tbl.Region(name=region_name, url_name=region_name.replace(" ", "_").casefold())
-        new_guild = tbl.Guild(snowflake=str(ctx.guild.id))
-        session.add(new_region)
-        session.add(new_guild)
+        new_guild = tbl.Guild(snowflake=ctx.guild.id, regions={new_region})
+        session.add_all([new_region, new_guild])
         session.commit() #flush?
-        new_association = tbl.GuildRegion(guild_id=new_guild.id, region_id=new_region.id)
-        session.add(new_association)
-        session.commit()
 
     try:
-        nerris._link_roles(verified_role, resident_role, ctx.message)
+        nerris.link_roles(verified_role, resident_role, ctx.message)
         await ctx.send("The region has been registered to this server along with the roles!")
     except NoRoles:
         await ctx.send("The region has been registered to this server!")
@@ -414,7 +342,7 @@ async def link_region(ctx, region_name: str, verified_role: Optional[discord.Rol
 @commands.guild_only()
 async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role]):
     try:
-        await ctx.send(nerris._link_roles(verified_role, resident_role, ctx.message))
+        await ctx.send(nerris.link_roles(verified_role, resident_role, ctx.message))
     except NoRoles:
         await ctx.send("I don't know why you're trying to add roles without giving me any...")
     except InvalidGuild as Guild:

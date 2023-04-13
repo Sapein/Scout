@@ -1,48 +1,61 @@
 """
 """
 
-from typing import Optional, Set
+from typing import Optional
 from sqlalchemy import Table, Column, ForeignKey, Identity, Text
 from sqlalchemy.orm import Mapped, relationship, mapped_column
 from Nerris.database.base import Base
 
+UserNation = Table(
+    "user_nations",
+    Base.metadata,
+    Column("nation_id", ForeignKey("nations.id"), primary_key=True),
+    Column("user_id", ForeignKey("users.id"), primary_key=True)
+)
 
-class UserNation(Base):
-    __tablename__ = "user_nations"
+GuildRegion = Table(
+    "guild_regions",
+    Base.metadata,
+    Column("region_id", ForeignKey("regions.id"), primary_key=True),
+    Column("guild_id", ForeignKey("guilds.id"), primary_key=True)
+)
 
-    nation_id: Mapped[int] = mapped_column(ForeignKey("nations.id"), primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
 
-class GuildRegion(Base):
-    __tablename__ = "guild_regions"
-
-    region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"), primary_key=True)
-    guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"), primary_key=True)
+RoleMeaning = Table(
+    "role_meanings",
+    Base.metadata,
+    Column("meaning_id", ForeignKey("meanings.id"), primary_key=True),
+    Column("role_id", ForeignKey("roles.id"), primary_key=True)
+)
 
 
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    snowflake: Mapped[str]
+    snowflake: Mapped[int]
 
-    # nations: Mapped[Set["Nation"]] = relationship(secondary=UserNation)
+    nations: Mapped[set["Nation"]] = relationship(secondary=UserNation, back_populates="users")
 
 class Guild(Base):
     __tablename__ = "guilds"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    snowflake: Mapped[str]
+    snowflake: Mapped[int]
 
-    # regions: Mapped[Set["Region"]] = relationship(secondary=GuildRegion)
+    regions: Mapped[set["Region"]] = relationship(secondary=GuildRegion, back_populates="guilds")
+    roles: Mapped[set["Role"]] = relationship(back_populates="guild")
 
 class Role(Base):
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    snowflake: Mapped[str]
+    snowflake: Mapped[int]
 
     guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"))
+
+    meanings: Mapped[set["Meaning"]] = relationship(secondary=RoleMeaning, back_populates="roles")
+    guild: Mapped["Guild"] = relationship(back_populates="roles")
 
 
 class Meaning(Base):
@@ -51,11 +64,7 @@ class Meaning(Base):
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     meaning: Mapped[str] = mapped_column(Text)
 
-class RoleMeaning(Base):
-    __tablename__ = "role_meanings"
-
-    meaning_id: Mapped[str] = mapped_column(ForeignKey("meanings.id"), primary_key=True)
-    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), primary_key=True)
+    roles: Mapped[set["Role"]] = relationship(secondary=RoleMeaning, back_populates="meanings")
 
 
 class Nation(Base):
@@ -67,8 +76,8 @@ class Nation(Base):
     region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"))
 
 
-    # user: Mapped["User"] = relationship(secondary=UserNation)
-    # region: Mapped["Region"] = relationship(back_populates="nations")
+    users: Mapped[set["User"]] = relationship(secondary=UserNation, back_populates="nations")
+    region: Mapped["Region"] = relationship(back_populates="nations")
 
 
 class Region(Base):
@@ -78,8 +87,8 @@ class Region(Base):
     name: Mapped[str]
     url_name: Mapped[str]
 
-    # nations: Mapped[Set["Nation"]] = relationship(back_populates="region")
-    # guild: Mapped["Guild"] = relationship(secondary=GuildRegion)
+    nations: Mapped[set["Nation"]] = relationship(back_populates="region")
+    guilds: Mapped[set["Guild"]] = relationship(secondary=GuildRegion, back_populates="regions")
 
 # class RegionalMessageBoard(Base):
 #     __tablename__ = "rmb"
