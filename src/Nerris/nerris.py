@@ -22,6 +22,7 @@ from Nerris.database import tables as tbl
 from Nerris.database import db
 from Nerris.enums import RoleTypes
 from Nerris.nationstates.nation import Nation
+from Nerris.nationstates.region import Region
 from Nerris.nationstates import ns
 from Nerris.exceptions import *
 
@@ -103,15 +104,15 @@ class NerrisBot(commands.Bot):
 
     async def register_nation(self, nation: Nation, message: discord.Message) -> str:
         with Session(self.db_engine) as session:
-            region_id = session.scalar(select(tbl.Region.id).where(tbl.Region.url_name == nation.region_url_name))
+            region_id = session.scalar(select(tbl.Region.id).where(tbl.Region.name == nation.region))
             if region_id is None:
-                new_region = tbl.Region(name=nation.region, url_name=nation.region_url_name)
+                new_region = tbl.Region(name=nation.region)
                 session.add(new_region)
                 session.commit()
                 region_id = new_region.id
 
             new_user = tbl.User(snowflake=message.author.id)
-            new_nation = tbl.Nation(name=nation.name, url_name=nation.url_name, region_id=region_id, users={new_user})
+            new_nation = tbl.Nation(name=nation.name, region_id=region_id, users={new_user})
             session.add_all([new_user, new_nation])
 
             session.commit()
@@ -119,13 +120,10 @@ class NerrisBot(commands.Bot):
 
     def get_regional_role(self, guild: discord.Guild, guild_db: tbl.Guild, user_db: tbl.User) -> str:
         shared_regions = guild_db.regions & {n.region for n in user_db.nations}
+        print(shared_regions)
 
         verified_role = None
-        resident_role = None
         for role in guild_db.roles:
-            if verified_role is not None and resident_role is not None:
-                break
-
             for meaning in role.meanings:
                 if meaning.meaning == RoleTypes.RESIDENT.value and shared_regions:
                     return role.snowflake
@@ -319,8 +317,9 @@ async def sync(ctx):
 @commands.is_owner()
 @commands.guild_only()
 async def link_region(ctx, region_name: str, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role]):
+    region = await nerris.ns_client.get_region(region_name)
     with Session(nerris.db_engine) as session:
-        new_region = tbl.Region(name=region_name, url_name=region_name.replace(" ", "_").casefold())
+        new_region = tbl.Region(name=region.name)
         new_guild = tbl.Guild(snowflake=ctx.guild.id, regions={new_region})
         session.add_all([new_region, new_guild])
         session.commit() #flush?

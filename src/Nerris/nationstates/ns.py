@@ -1,10 +1,14 @@
-import aiohttp
 import asyncio
-
 from datetime import datetime
-from typing import Optional, Self
 from dataclasses import dataclass
-from Nerris.nationstates.nation import Nation as Nation
+from typing import Optional, Self
+
+
+import aiohttp
+
+from Nerris.nationstates.region import Region
+from Nerris.nationstates.nation import Nation
+from Nerris.nationstates.exceptions import *
 
 __all__ = ["NationStatesClient"]
 
@@ -30,6 +34,7 @@ class NationStatesClient:
     base_url = "https://nationstates.net/cgi-bin/api.cgi?"
     version_shard = "a=version"
     nation_shard = "nation={}"
+    region_shard = "region={}"
     verify_shard = 'a=verify&nation={}&checksum={}'
 
     requests: Requests
@@ -46,13 +51,29 @@ class NationStatesClient:
             return "https://nationstates.net/page=verify_login"
         return "https://nationstates.net/page=verify_login?token={}".format(token)
 
-    async def get_nation(self, nation: str) -> Nation:
-        url = '{}{}'.format(base_url, nation_shard.format(nation.replace(" ", "_").casefold()))
+    async def get_region(self, region: str) -> Region:
+        url = "{}{}".format(self.base_url, self.region_shard.format(region.replace(" ", "_").casefold()))
 
-        response = await self._make_request(verify, self.headers)
-        name = response.split("<NAME>")[1].split("</NAME>")[0]
-        region = response.split("<REGION>")[1].split("</REGION>")[0]
-        return Nation(name, nation.replace(" ", "_").casefold(), region, region.replace(" ", "_").casefold())
+        response = await self._make_request(url, self.headers)
+
+        try:
+            name = response.split("<NAME>")[1].split("</NAME>")[0]
+        except KeyError:
+            RegionDoesNotExist("Region with name: {} does not exist!".format(region))
+
+        return Region(name)
+
+
+    async def get_nation(self, nation: str) -> Nation:
+        url = '{}{}'.format(self.base_url, self.nation_shard.format(nation.replace(" ", "_").casefold()))
+
+        response = await self._make_request(url, self.headers)
+        try:
+            name = response.split("<NAME>")[1].split("</NAME>")[0]
+            region = response.split("<REGION>")[1].split("</REGION>")[0]
+        except KeyError:
+            NationDoesNotExist("Nation with name: {} does not exist!".format(nation))
+        return Nation(name, region)
 
     async def verify(self, nation: Nation | str, code: str, token: Optional[str] = None) -> tuple[Nation, bool]:
         verify = '{}{}'.format(self.base_url, self.verify_shard)
@@ -67,10 +88,13 @@ class NationStatesClient:
             verify = '{}&token={}'.format(verify, token)
 
         response = await self._make_request(verify, self.headers)
-        name = response.split("<NAME>")[1].split("</NAME>")[0]
-        region = response.split("<REGION>")[1].split("</REGION>")[0]
-        verified = response.split("<VERIFY>")[1].split("</VERIFY>")[0]
-        nation = Nation(name, nation.replace(" ", "_").casefold(), region, region.replace(" ", "_").casefold())
+        try:
+            name = response.split("<NAME>")[1].split("</NAME>")[0]
+            region = response.split("<REGION>")[1].split("</REGION>")[0]
+            verified = response.split("<VERIFY>")[1].split("</VERIFY>")[0]
+        except KeyError:
+            raise NationDoesNotExist("Nation with name: {} does not exist!".format(nation))
+        nation = Nation(name, region)
         return bool(int(verified)), nation
 
     async def _make_request(self, url, headers) -> str:
