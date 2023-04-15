@@ -75,6 +75,12 @@ class NerrisBot(commands.Bot):
         session.commit() #flush?
         return self
 
+    def remove_role(self, session: Session, role: discord.Role) -> Optional[discord.Role]:
+        if (role_db := session.scalar(select(tbl.Role).where(tbl.Role.snowflake == verified_role.id)) is not None:
+            session.delete(role_db)
+            return role
+        return None
+
     def add_role_meaning(self, session: Session, role: discord.Role, guild: discord.Guild, meaning: RoleTypes) -> Self:
         if meaning.value not in self.meaning_ids:
             raise InvalidMeaning(meaning)
@@ -434,6 +440,28 @@ async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: 
         await ctx.send("Oh no, I've lost my notes! I can't currently add roles!")
     except RoleOverwrite as Role:
         await ctx.send("Unfortuantely that would overwrite a role. Use `\link_roles` with overrwrite_roles set to True")
+
+
+@nerris.hybrid_command()
+@commands.is_owner()
+@commands.guild_only()
+async def unlink_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], remove_roles: Optional[bool] = True):
+    unlinked_roles: list[discord.Role] = []
+    with Session(nerris.db_engine) as session:
+        if verified_role and (res := nerris.remove_role(verified_role)) is not None:
+            unliked_roles.append(res)
+            if resident_role and (res := nerris.remove_role(verified_role)) is not None:
+                unliked_roles.append(res)
+                session.commit()
+
+    if remove_roles:
+        for role in unlinked_roles:
+            for member in role.members:
+                await member.remove_roles(role)
+    if unlinked_roles:
+        await ctx.send("I've gone ahead and removed that role from my notes!")
+    else:
+        await ctx.send("You didn't give me any valid roles to remove from notes!...")
 
 
 nerris.run(os.environ.get("NERRIS_TOKEN"))
