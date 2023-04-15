@@ -118,25 +118,6 @@ class NerrisBot(commands.Bot):
             session.commit()
             return "There we go! I'll see if I can get you some roles..."
 
-    def get_regional_role(self, guild: discord.Guild, guild_db: tbl.Guild, user_db: tbl.User) -> str:
-        shared_regions = guild_db.regions & {n.region for n in user_db.nations}
-        print(shared_regions)
-
-        verified_role = None
-        for role in guild_db.roles:
-            for meaning in role.meanings:
-                if meaning.meaning == RoleTypes.RESIDENT.value and shared_regions:
-                    return role.snowflake
-                elif meaning.meaning == RoleTypes.VERIFIED.value:
-                    if not shared_regions:
-                        return role.snowflake
-                    verified_role = role
-
-        if verified_role is not None:
-            return verified_role.snowflake
-        raise NoRoles()
-
-
     async def give_verified_roles_one_guild(self, user: discord.User | discord.Member, guild: discord.Guild):
         with Session(self.db_engine) as session:
             if isinstance(user, discord.User) or user.guild != guild:
@@ -159,7 +140,43 @@ class NerrisBot(commands.Bot):
             if not guild_db.roles:
                 raise NoRoles()
 
-            await user.add_roles(discord.Object(self.get_regional_role(guild, guild_db, user_db)))
+            shared_regions = guild_db.regions & {n.region for n in user_db.nations}
+
+            resident_role_sql = (select(tbl.Role)
+                                 .where(tbl.Role.guild_id == guild_db.id)
+                                 .join(tbl.RoleMeaning)
+                                 .join(tbl.Meaning)
+                                 .where(tbl.Meaning.meaning == RoleTypes.RESIDENT.value.casefold())
+                                 .distinct())
+
+            verified_role_sql = (select(tbl.Role)
+                                 .where(tbl.Role.guild_id == guild_db.id)
+                                 .join(tbl.RoleMeaning)
+                                 .join(tbl.Meaning)
+                                 .where(tbl.Meaning.meaning == RoleTypes.VERIFIED.value.casefold())
+                                 .distinct())
+
+            resident_role = session.scalar(resident_role_sql)
+            verified_role = session.scalar(verified_role_sql)
+
+            if resident_role and verified_role:
+                if user.get_role(resident_role.snowflake) and not shared_regions:
+                    await user.remove_roles(discord.Object(resident_role.snowflake))
+                    await user.add_roles(discord.Object(verified_role.snowflake))
+                elif user.get_role(verified_role.snowflake) and shared_regions:
+                    await user.remove_roles(discord.Object(verified_role.snowflake))
+                    await user.add_roles(discord.Object(resident_role.snowflake))
+                else:
+                    await user.add_roles(discord.Object(verified_role.snowflake))
+            elif resident_role:
+                has_role = user.get_role(resident_role.snowflake)
+                if not has_role and shared_regions:
+                    await user.add_roles(discord.Object(resident_role.snowflake))
+                elif has_role and not shared_regions:
+                    await user.remove_roles(discord.Object(resident_role.snowflake))
+            elif verified_role:
+                if user.get_role(verified_role.snowflake):
+                    await user.add_roles(discord.Object(verified_role.snowflake))
 
     async def give_verified_roles(self, user: discord.User | discord.Member):
         with Session(self.db_engine) as session:
