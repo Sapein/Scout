@@ -203,13 +203,13 @@ class NerrisBot(commands.Bot):
             guild_id = session.scalar(select(tbl.Guild.id).where(tbl.Guild.snowflake == resident_role.guild.id))
             verified_sql = (select(tbl.Role)
                             .where(tbl.Role.guild_id == guild_id)
-                            .join(tbl.RoleMeanings)
+                            .join(tbl.RoleMeaning)
                             .join(tbl.Meaning)
                             .where(tbl.Meaning.meaning == RoleTypes.VERIFIED.value.casefold())
                             .distinct())
             resident_sql = (select(tbl.Role)
                             .where(tbl.Role.guild_id == guild_id)
-                            .join(tbl.RoleMeanings)
+                            .join(tbl.RoleMeaning)
                             .join(tbl.Meaning)
                             .where(tbl.Meaning.meaning == RoleTypes.RESIDENT.value.casefold())
                             .distinct())
@@ -226,7 +226,7 @@ class NerrisBot(commands.Bot):
                     
 
             if resident_role is not None:
-                role = session.scalar(verified_sql)
+                role = session.scalar(resident_sql)
                 if role and role.snowflake != verified_role.id and override:
                     session.delete(role)
                     session.commit()
