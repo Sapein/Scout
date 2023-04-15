@@ -8,6 +8,10 @@ class InvalidRole(Exception):
     pass
 
 
+class RoleOverwrite(Exception):
+    pass
+
+
 class NoRoles(Exception):
     pass
 

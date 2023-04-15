@@ -195,16 +195,45 @@ class NerrisBot(commands.Bot):
                 except NotInGuild:
                     pass
 
-    def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], message: discord.Message) -> str:
+    def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], message: discord.Message, override: Optional[bool] = False) -> str:
         with Session(self.db_engine) as session:
             if verified_role is None and resident_role is None:
                 raise NoRoles()
 
+            guild_id = session.scalar(select(tbl.Guild.id).where(tbl.Guild.snowflake == resident_role.guild.id))
+            verified_sql = (select(tbl.Role)
+                            .where(tbl.Role.guild_id == guild_id)
+                            .join(tbl.RoleMeanings)
+                            .join(tbl.Meaning)
+                            .where(tbl.Meaning.meaning == RoleTypes.VERIFIED.value.casefold())
+                            .distinct())
+            resident_sql = (select(tbl.Role)
+                            .where(tbl.Role.guild_id == guild_id)
+                            .join(tbl.RoleMeanings)
+                            .join(tbl.Meaning)
+                            .where(tbl.Meaning.meaning == RoleTypes.RESIDENT.value.casefold())
+                            .distinct())
+
             if verified_role is not None:
-                nerris.store_role(session, verified_role, message.guild).add_role_meaning(session, verified_role, message.guild, RoleTypes.VERIFIED)
+                role = session.scalar(verified_sql)
+                if role and role.snowflake != verified_role.id and override:
+                    session.delete(role)
+                    session.commit()
+                elif not role:
+                    nerris.store_role(session, verified_role, message.guild).add_role_meaning(session, verified_role, message.guild, RoleTypes.VERIFIED)
+                else:
+                    raise RoleOverwrite(verified_role)
+                    
 
             if resident_role is not None:
-                nerris.store_role(session, resident_role, message.guild).add_role_meaning(session, resident_role, message.guild, RoleTypes.RESIDENT)
+                role = session.scalar(verified_sql)
+                if role and role.snowflake != verified_role.id and override:
+                    session.delete(role)
+                    session.commit()
+                elif not role:
+                    nerris.store_role(session, resident_role, message.guild).add_role_meaning(session, resident_role, message.guild, RoleTypes.RESIDENT)
+                else:
+                    raise RoleOverwrite(resident_role)
 
             if verified_role is not None and resident_role is not None:
                 return ("A Natural 20, a critical success! I've obtained the mythical +1 roles of {} and {}!"
@@ -342,23 +371,8 @@ async def link_region(ctx, region_name: str, verified_role: Optional[discord.Rol
         session.commit() #flush?
 
     try:
-        nerris.link_roles(verified_role, resident_role, ctx.message)
+        nerris.link_roles(verified_role, resident_role, ctx.message, override=False)
         await ctx.send("The region has been registered to this server along with the roles!")
-    except NoRoles:
-        await ctx.send("The region has been registered to this server!")
-    except InvalidGuild as Guild:
-        await ctx.send("I was unable to assign to this guild somehow...")
-    except InvalidRole as Role:
-        await ctx.send("The role {} does not exist somehow".format(Role))
-    except InvalidMeaning as Meaning:
-        await ctx.send("Whoops")
-
-@nerris.hybrid_command()
-@commands.is_owner()
-@commands.guild_only()
-async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role]):
-    try:
-        await ctx.send(nerris.link_roles(verified_role, resident_role, ctx.message))
     except NoRoles:
         await ctx.send("I don't know why you're trying to add roles without giving me any...")
     except InvalidGuild as Guild:
@@ -367,6 +381,25 @@ async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: 
         await ctx.send("Oh no, I rolled a Nat 1! I can't currently add that role!")
     except InvalidMeaning as Meaning:
         await ctx.send("Oh no, I've lost my notes! I can't currently add roles!")
+    except RoleOverwrite as Role:
+        await ctx.send("Unfortuantely that would overwrite a role. Use `\link_roles` with overrwrite_roles set to True")
+
+@nerris.hybrid_command()
+@commands.is_owner()
+@commands.guild_only()
+async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], overwrite_roles: Optional[bool] = False):
+    try:
+        await ctx.send(nerris.link_roles(verified_role, resident_role, ctx.message, override=overwrite_roles))
+    except NoRoles:
+        await ctx.send("I don't know why you're trying to add roles without giving me any...")
+    except InvalidGuild as Guild:
+        await ctx.send("Looks like you don't have a region associated with this server!")
+    except InvalidRole as Role:
+        await ctx.send("Oh no, I rolled a Nat 1! I can't currently add that role!")
+    except InvalidMeaning as Meaning:
+        await ctx.send("Oh no, I've lost my notes! I can't currently add roles!")
+    except RoleOverwrite as Role:
+        await ctx.send("Unfortuantely that would overwrite a role. Use `\link_roles` with overrwrite_roles set to True")
 
 
 nerris.run(os.environ.get("NERRIS_TOKEN"))
