@@ -200,7 +200,7 @@ class NerrisBot(commands.Bot):
             if verified_role is None and resident_role is None:
                 raise NoRoles()
 
-            guild_id = session.scalar(select(tbl.Guild.id).where(tbl.Guild.snowflake == resident_role.guild.id))
+            guild_id = session.scalar(select(tbl.Guild.id).where(tbl.Guild.snowflake == message.guild.id))
             verified_sql = (select(tbl.Role)
                             .where(tbl.Role.guild_id == guild_id)
                             .join(tbl.RoleMeaning)
@@ -216,18 +216,18 @@ class NerrisBot(commands.Bot):
 
             if verified_role is not None:
                 role = session.scalar(verified_sql)
-                if role and role.snowflake != verified_role.id and override:
+                if role and override:
                     session.delete(role)
                     session.commit()
                 elif not role:
                     nerris.store_role(session, verified_role, message.guild).add_role_meaning(session, verified_role, message.guild, RoleTypes.VERIFIED)
                 else:
                     raise RoleOverwrite(verified_role)
-                    
+
 
             if resident_role is not None:
                 role = session.scalar(resident_sql)
-                if role and role.snowflake != verified_role.id and override:
+                if role and override:
                     session.delete(role)
                     session.commit()
                 elif not role:
@@ -391,6 +391,14 @@ async def link_region(ctx, region_name: str, verified_role: Optional[discord.Rol
     try:
         nerris.link_roles(verified_role, resident_role, ctx.message, override=False)
         await ctx.send("The region has been registered to this server along with the roles!")
+
+        with Session(nerris.db_engine) as session:
+            users = session.scalars(select(tbl.User.snowflake)).all()
+            if users:
+                members = await ctx.guild.query_members(user_ids=users)
+                for member in members:
+                    await nerris.give_verified_roles_one_guild(member, ctx.guild)
+
     except NoRoles:
         await ctx.send("I don't know why you're trying to add roles without giving me any...")
     except InvalidGuild as Guild:
@@ -408,6 +416,14 @@ async def link_region(ctx, region_name: str, verified_role: Optional[discord.Rol
 async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], overwrite_roles: Optional[bool] = False):
     try:
         await ctx.send(nerris.link_roles(verified_role, resident_role, ctx.message, override=overwrite_roles))
+
+        with Session(nerris.db_engine) as session:
+            users = session.scalars(select(tbl.User.snowflake)).all()
+            if users:
+                members = await ctx.guild.query_members(user_ids=users)
+                for member in members:
+                    await nerris.give_verified_roles_one_guild(member, ctx.guild)
+
     except NoRoles:
         await ctx.send("I don't know why you're trying to add roles without giving me any...")
     except InvalidGuild as Guild:
