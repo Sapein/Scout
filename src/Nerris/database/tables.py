@@ -56,8 +56,8 @@ class Role(Base):
 
     guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"))
 
-    meanings: Mapped[set["Meaning"]] = relationship(secondary=RoleMeaning, back_populates="roles", cascade='save-update, merge, delete')
-    guild: Mapped["Guild"] = relationship(back_populates="roles", cascade="save-update, merge, delete")
+    meanings: Mapped[set["Meaning"]] = relationship(secondary=RoleMeaning, back_populates="roles")
+    guild: Mapped["Guild"] = relationship(back_populates="roles")
 
 
 class Meaning(Base):

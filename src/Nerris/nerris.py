@@ -262,9 +262,27 @@ async def verified_nations(ctx, private_response: Optional[bool] = True):
     await ctx.send("I don't have any nations for you!")
 
 @nerris.listen('on_member_join')
-async def verify_on_join(member):
+async def verify_on_join(member: discord.Member):
     with Session(nerris.db_engine) as session:
         await nerris.give_verified_roles_one_guild(member, member.guild)
+
+
+@nerris.listen('on_guild_role_delete')
+async def remove_stored_roles(role: discord.Role):
+    with Session(nerris.db_engine) as session:
+        role_db = session.scalar(select(tbl.Role).where(tbl.Role.snowflake == role.id))
+        if role_db:
+            session.delete(role_db)
+            session.commit()
+
+
+@nerris.listen('on_guild_role_update')
+async def update_stored_roles(before: discord.Role, after: discord.Role):
+    with Session(nerris.db_engine) as session:
+        role_db = session.scalar(select(tbl.Role).where(tbl.Role.snowflake == before.id))
+        if before.id != after.id and role_db:
+            role_db.snowflake = after.id
+            session.commit()
 
 
 @nerris.hybrid_command()
