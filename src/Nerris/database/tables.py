@@ -44,7 +44,7 @@ class Guild(Base):
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     snowflake: Mapped[int]
 
-    regions: Mapped[set["Region"]] = relationship(secondary=GuildRegion, back_populates="guilds", cascade="save-update, merge, delete")
+    regions: Mapped[set["Region"]] = relationship(secondary=GuildRegion, back_populates="guilds")
     roles: Mapped[set["Role"]] = relationship(back_populates="guild", cascade="save-update, merge, delete, delete-orphan")
 
 
@@ -78,8 +78,8 @@ class Nation(Base):
     region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"))
 
 
-    users: Mapped[set["User"]] = relationship(secondary=UserNation, back_populates="nations", cascade="save-update, merge, delete")
-    region: Mapped["Region"] = relationship(back_populates="nations", cascade="save-update, merge, delete")
+    users: Mapped[set["User"]] = relationship(secondary=UserNation, back_populates="nations")
+    region: Mapped["Region"] = relationship(back_populates="nations")
 
 
 class Region(Base):
@@ -89,7 +89,7 @@ class Region(Base):
     name: Mapped[str]
 
     nations: Mapped[set["Nation"]] = relationship(back_populates="region", cascade="save-update, merge, delete, delete-orphan")
-    guilds: Mapped[set["Guild"]] = relationship(secondary=GuildRegion, back_populates="regions", cascade="save-update, merge, delete")
+    guilds: Mapped[set["Guild"]] = relationship(secondary=GuildRegion, back_populates="regions")
 
 
 # class RegionalMessageBoard(Base):

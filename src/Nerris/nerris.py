@@ -76,7 +76,7 @@ class NerrisBot(commands.Bot):
         return self
 
     def remove_role(self, session: Session, role: discord.Role) -> Optional[discord.Role]:
-        if (role_db := session.scalar(select(tbl.Role).where(tbl.Role.snowflake == verified_role.id)) is not None:
+        if (role_db := session.scalar(select(tbl.Role).where(tbl.Role.snowflake == role.id))) is not None:
             session.delete(role_db)
             return role
         return None
@@ -448,11 +448,11 @@ async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: 
 async def unlink_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], remove_roles: Optional[bool] = True):
     unlinked_roles: list[discord.Role] = []
     with Session(nerris.db_engine) as session:
-        if verified_role and (res := nerris.remove_role(verified_role)) is not None:
-            unliked_roles.append(res)
-            if resident_role and (res := nerris.remove_role(verified_role)) is not None:
-                unliked_roles.append(res)
-                session.commit()
+        if verified_role and (res := nerris.remove_role(session, verified_role)) is not None:
+            unlinked_roles.append(res)
+        if resident_role and (res := nerris.remove_role(session, resident_role)) is not None:
+            unlinked_roles.append(res)
+        session.commit()
 
     if remove_roles:
         for role in unlinked_roles:
@@ -462,6 +462,33 @@ async def unlink_roles(ctx, verified_role: Optional[discord.Role], resident_role
         await ctx.send("I've gone ahead and removed that role from my notes!")
     else:
         await ctx.send("You didn't give me any valid roles to remove from notes!...")
+
+
+@nerris.hybrid_command()
+@commands.is_owner()
+@commands.guild_only()
+async def unlink_region(ctx, region_name: str):
+    with Session(nerris.db_engine) as session:
+        ns_region = await nerris.ns_client.get_region(region_name.replace(" ", "_"))
+        region = session.scalar(select(tbl.Region).where(tbl.Region.name == ns_region.name))
+        guild = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == ctx.guild.id))
+        if region and region in guild.regions:
+            guild.regions.remove(region)
+
+        await ctx.send("I've gone ahead and removed that role from my notes!")
+
+@nerris.hybrid_command()
+@commands.is_owner()
+@commands.guild_only()
+async def unlink_region(ctx, region_name: str):
+    with Session(nerris.db_engine) as session:
+        ns_region = await nerris.ns_client.get_region(region_name.replace(" ", "_"))
+        region = session.scalar(select(tbl.Region).where(tbl.Region.name == ns_region.name))
+        guild = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == ctx.guild.id))
+        if region and region in guild.regions:
+            guild.regions.remove(region)
+
+        await ctx.send("I've gone ahead and removed that role from my notes!")
 
 
 nerris.run(os.environ.get("NERRIS_TOKEN"))
