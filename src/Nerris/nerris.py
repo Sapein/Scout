@@ -294,9 +294,9 @@ async def verified_nations(ctx, private_response: Optional[bool] = True):
     Displays Verified Nations of a given user.
     """
     with Session(nerris.db_engine) as session:
-        user_nations = session.scalar(select(tbl.User.nations).where(tbl.User.snowflake == ctx.message.author.id))
+        user_nations = session.scalar(select(tbl.User).where(tbl.User.snowflake == ctx.message.author.id)).nations
         if user_nations:
-            await ctx.send('\n'.join(user_nations), ephemeral=private_response)
+            await ctx.send('\n'.join([n.name for n in user_nations]), ephemeral=private_response)
     await ctx.send("I don't have any nations for you!")
 
 @nerris.listen('on_member_join')
