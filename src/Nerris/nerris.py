@@ -322,6 +322,13 @@ async def update_stored_roles(before: discord.Role, after: discord.Role):
             role_db.snowflake = after.id
             session.commit()
 
+@nerris.listen('on_guild_remove')
+async def remove_guild_info(guild: discord.Guild):
+    with Session(nerris.db_engine) as session:
+        guild_db = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == guild.id))
+        session.delete(guild_db)
+        session.commit()
+
 
 @nerris.hybrid_command()
 @commands.guild_only()
