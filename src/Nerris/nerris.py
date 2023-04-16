@@ -124,7 +124,7 @@ class NerrisBot(commands.Bot):
             session.commit()
             return "There we go! I'll see if I can get you some roles..."
 
-    async def give_verified_roles_one_guild(self, user: discord.User | discord.Member, guild: discord.Guild):
+    async def give_verified_roles_one_guild(self, user: discord.User | discord.Member, guild: discord.Guild, noNationError=True):
         with Session(self.db_engine) as session:
             if isinstance(user, discord.User) or user.guild != guild:
                 user = guild.fetch_member(user.id)
@@ -140,7 +140,7 @@ class NerrisBot(commands.Bot):
                 raise NoRoles()
 
             user_db = session.scalar(select(tbl.User).where(tbl.User.snowflake == user.id))
-            if not user_db.nations:
+            if not user_db.nations and noNationError:
                 raise NoNation()
 
             if not guild_db.roles:
@@ -165,24 +165,56 @@ class NerrisBot(commands.Bot):
             resident_role = session.scalar(resident_role_sql)
             verified_role = session.scalar(verified_role_sql)
 
-            if resident_role and verified_role:
-                if user.get_role(resident_role.snowflake) and not shared_regions:
-                    await user.remove_roles(discord.Object(resident_role.snowflake))
-                    await user.add_roles(discord.Object(verified_role.snowflake))
-                elif user.get_role(verified_role.snowflake) and shared_regions:
-                    await user.remove_roles(discord.Object(verified_role.snowflake))
-                    await user.add_roles(discord.Object(resident_role.snowflake))
-                else:
-                    await user.add_roles(discord.Object(verified_role.snowflake))
-            elif resident_role:
-                has_role = user.get_role(resident_role.snowflake)
-                if not has_role and shared_regions:
-                    await user.add_roles(discord.Object(resident_role.snowflake))
-                elif has_role and not shared_regions:
-                    await user.remove_roles(discord.Object(resident_role.snowflake))
-            elif verified_role:
-                if user.get_role(verified_role.snowflake):
-                    await user.add_roles(discord.Object(verified_role.snowflake))
+            if user_db.nations:
+                if resident_role and verified_role:
+                    if user.get_role(resident_role.snowflake) and not shared_regions:
+                        await user.remove_roles(discord.Object(resident_role.snowflake))
+                        await user.add_roles(discord.Object(verified_role.snowflake))
+                    elif user.get_role(verified_role.snowflake) and shared_regions:
+                        await user.remove_roles(discord.Object(verified_role.snowflake))
+                        await user.add_roles(discord.Object(resident_role.snowflake))
+                    else:
+                        await user.add_roles(discord.Object(verified_role.snowflake))
+                elif resident_role:
+                    has_role = user.get_role(resident_role.snowflake)
+                    if not has_role and shared_regions:
+                        await user.add_roles(discord.Object(resident_role.snowflake))
+                    elif has_role and not shared_regions:
+                        await user.remove_roles(discord.Object(resident_role.snowflake))
+                elif verified_role:
+                    if user.get_role(verified_role.snowflake):
+                        await user.add_roles(discord.Object(verified_role.snowflake))
+            else:
+                if resident_role and verified_role:
+                    if user.get_role(resident_role.snowflake):
+                        await user.remove_roles(discord.Object(resident_role.snowflake))
+                    if user.get_role(verified_role.snowflake):
+                        await user.remove_roles(discord.Object(verified_role.snowflake))
+                elif resident_role:
+                    has_role = user.get_role(resident_role.snowflake)
+                    if user.get_role(resident_role.snowflake):
+                        await user.remove_roles(discord.Object(resident_role.snowflake))
+                elif verified_role:
+                    if user.get_role(verified_role.snowflake):
+                        await user.remove_roles(discord.Object(verified_role.snowflake))
+
+    async def update_verified_roles(self, user: discord.User | discord.Member):
+        with Session(self.db_engine) as session:
+            if not session.scalars(select(tbl.Role)).all():
+                raise NoRoles()
+
+            mutual_guilds = {g.id:(g, m) for g in self.guilds if (m := await g.fetch_member(user.id))}
+
+            active_guilds = session.scalars(select(tbl.Guild.snowflake).where(tbl.Guild.snowflake.in_(mutual_guilds.keys()))).all()
+            if not active_guilds:
+                raise NoGuilds()
+
+            for guild_snowflake in active_guilds:
+                try:
+                    await self.give_verified_roles_one_guild(mutual_guilds[guild_snowflake][1], mutual_guilds[guild_snowflake][0], noNationError=False)
+                except NotInGuild:
+                    pass
+
 
     async def give_verified_roles(self, user: discord.User | discord.Member):
         with Session(self.db_engine) as session:
@@ -478,17 +510,27 @@ async def unlink_region(ctx, region_name: str):
         await ctx.send("I've gone ahead and removed that role from my notes!")
 
 @nerris.hybrid_command()
-@commands.is_owner()
 @commands.guild_only()
-async def unlink_region(ctx, region_name: str):
+async def unverify_nation(ctx, nation_name: str):
     with Session(nerris.db_engine) as session:
-        ns_region = await nerris.ns_client.get_region(region_name.replace(" ", "_"))
-        region = session.scalar(select(tbl.Region).where(tbl.Region.name == ns_region.name))
-        guild = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == ctx.guild.id))
-        if region and region in guild.regions:
-            guild.regions.remove(region)
+        if (user := session.scalar(select(tbl.User).where(tbl.User.snowflake == ctx.author.id))) is not None:
+            ns_nation = await nerris.ns_client.get_nation(nation_name)
+            if (nation := session.scalar(select(tbl.Nation).where(tbl.Nation.name == ns_nation.name))) is not None:
+                if nation in user.nations:
+                    try:
+                        nation.users.remove(user)
+                        user.nations.remove(nation)
+                    except (ValueError, KeyError):
+                        pass
+                    if not nation.users:
+                        session.delete(nation)
+                    session.commit()
+                    await nerris.update_verified_roles(ctx.author)
+                    if not user.nations:
+                        session.delete(user)
+                    session.commit()
 
-        await ctx.send("I've gone ahead and removed that role from my notes!")
+    await ctx.send("I've removed your character sheet from my campaign notes.")
 
 
 nerris.run(os.environ.get("NERRIS_TOKEN"))
