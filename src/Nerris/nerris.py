@@ -445,7 +445,7 @@ async def link_region(ctx, region_name: str, verified_role: Optional[discord.Rol
                     await nerris.give_verified_roles_one_guild(member, ctx.guild)
 
     except NoRoles:
-        await ctx.send("I don't know why you're trying to add roles without giving me any...")
+        await ctx.send("I've added that world to my maps!")
     except InvalidGuild as Guild:
         await ctx.send("Looks like you don't have a region associated with this server!")
     except InvalidRole as Role:
