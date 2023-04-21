@@ -7,7 +7,7 @@ This contains all the main 'logic' for the Discord Bot part of things.
 import asyncio
 import os
 
-from typing import Self, Optional
+from typing import Self, Optional, Any
 
 import aiohttp
 import discord
@@ -22,7 +22,6 @@ from Nerris.database import tables as tbl
 from Nerris.database import db
 from Nerris.enums import RoleTypes
 from Nerris.nationstates.nation import Nation
-from Nerris.nationstates.region import Region
 from Nerris.nationstates import ns
 from Nerris.exceptions import *
 
@@ -38,9 +37,9 @@ class NerrisBot(commands.Bot):
     The main Discord Bot Class
     """
     db_engine = db.connect(in_memory=True)
-    users_verifying = {}
-    meaning_ids: dict[RoleTypes, int] = {RoleTypes.VERIFIED.value: None,
-                                         RoleTypes.RESIDENT.value: None}
+    users_verifying: dict[Any, Any] = {}
+    meaning_ids = {RoleTypes.VERIFIED.value: None,
+                   RoleTypes.RESIDENT.value: None}
 
     async def on_ready(self, *args, **kwargs):
         self.aiohttp_session = aiohttp.ClientSession()
@@ -92,17 +91,19 @@ class NerrisBot(commands.Bot):
         if role.id not in [r.snowflake for r in guild_db.roles]:
             raise InvalidRole(role)
 
-        role = [r for r in guild_db.roles if r.snowflake == role.id][0]
-        meaning = session.scalar(select(tbl.Meaning).where(tbl.Meaning.id == self.meaning_ids[meaning.value]))
-        role.meanings.add(meaning)
+        role_db = [r for r in guild_db.roles if r.snowflake == role.id][0]
+        meaning_db = session.scalar(select(tbl.Meaning).where(tbl.Meaning.id == self.meaning_ids[meaning.value]))
+        if meaning_db is None:
+            raise InvalidMeaning()
+        role_db.meanings.add(meaning_db)
         session.commit() #flush?
         return self
 
-    async def verify_nation(self, nation: str, code: Optional[str]) -> tuple[str, Nation]:
+    async def verify_nation(self, nation_name: str, code: Optional[str]) -> tuple[str, Nation]:
         if code is None:
             raise NoCode_NSVerify()
 
-        response, nation = await self.ns_client.verify(nation, code)
+        response, nation = await self.ns_client.verify(nation_name, code)
         if not response:
             raise InvalidCode_NSVerify(code)
 
@@ -127,7 +128,7 @@ class NerrisBot(commands.Bot):
     async def give_verified_roles_one_guild(self, user: discord.User | discord.Member, guild: discord.Guild, noNationError=True):
         with Session(self.db_engine) as session:
             if isinstance(user, discord.User) or user.guild != guild:
-                user = guild.fetch_member(user.id)
+                user = await guild.fetch_member(user.id)
 
             if not user:
                 raise NotInGuild()
@@ -140,8 +141,12 @@ class NerrisBot(commands.Bot):
                 raise NoRoles()
 
             user_db = session.scalar(select(tbl.User).where(tbl.User.snowflake == user.id))
-            if not user_db.nations and noNationError:
+            error = user_db is None
+            if (user_db is None or not user_db.nations) and noNationError:
                 raise NoNation()
+            elif user_db is None:
+                raise NoUser()
+
 
             if not guild_db.roles:
                 raise NoRoles()
@@ -233,12 +238,12 @@ class NerrisBot(commands.Bot):
                 except NotInGuild:
                     pass
 
-    def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], message: discord.Message, override: Optional[bool] = False) -> str:
+    def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], guild: discord.Guild, override: Optional[bool] = False) -> str:
         with Session(self.db_engine) as session:
             if verified_role is None and resident_role is None:
                 raise NoRoles()
 
-            guild_id = session.scalar(select(tbl.Guild.id).where(tbl.Guild.snowflake == message.guild.id))
+            guild_id = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == guild.id))
             verified_sql = (select(tbl.Role)
                             .where(tbl.Role.guild_id == guild_id)
                             .join(tbl.RoleMeaning)
@@ -258,7 +263,7 @@ class NerrisBot(commands.Bot):
                     session.delete(role)
                     session.commit()
                 elif not role:
-                    nerris.store_role(session, verified_role, message.guild).add_role_meaning(session, verified_role, message.guild, RoleTypes.VERIFIED)
+                    nerris.store_role(session, verified_role, guild).add_role_meaning(session, verified_role, guild, RoleTypes.VERIFIED)
                 else:
                     raise RoleOverwrite(verified_role)
 
@@ -269,7 +274,7 @@ class NerrisBot(commands.Bot):
                     session.delete(role)
                     session.commit()
                 elif not role:
-                    nerris.store_role(session, resident_role, message.guild).add_role_meaning(session, resident_role, message.guild, RoleTypes.RESIDENT)
+                    nerris.store_role(session, resident_role, guild).add_role_meaning(session, resident_role, guild, RoleTypes.RESIDENT)
                 else:
                     raise RoleOverwrite(resident_role)
 
@@ -288,15 +293,15 @@ class NerrisBot(commands.Bot):
 
 nerris = NerrisBot(command_prefix = ".", intents=intents)
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 async def verified_nations(ctx, private_response: Optional[bool] = True):
     """
     Displays Verified Nations of a given user.
     """
     with Session(nerris.db_engine) as session:
-        user_nations = session.scalar(select(tbl.User).where(tbl.User.snowflake == ctx.message.author.id)).nations
-        if user_nations:
-            await ctx.send('\n'.join([n.name for n in user_nations]), ephemeral=private_response)
+        user = session.scalar(select(tbl.User).where(tbl.User.snowflake == ctx.message.author.id))
+        if user is not None and user.nations:
+            await ctx.send('\n'.join([n.name for n in user.nations]), ephemeral=private_response)
     await ctx.send("I don't have any nations for you!")
 
 @nerris.listen('on_member_join')
@@ -330,7 +335,7 @@ async def remove_guild_info(guild: discord.Guild):
         session.commit()
 
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.guild_only()
 async def verify_nation(ctx, code: Optional[str], nation: str):
     """
@@ -357,16 +362,19 @@ async def verify_nation(ctx, code: Optional[str], nation: str):
         message = None
         try:
             async with ctx.typing(ephemeral=True):
-                res, nation = await nerris.verify_nation(nation, code)
-                message = await ctx.send("Thanks for the character sheet! I'll go ahead and put you in my campaign binder...", ephemeral=True)
+                res, ns_nation = await nerris.verify_nation(nation, code)
+                if res:
+                    message = await ctx.send("Thanks for the character sheet! I'll go ahead and put you in my campaign binder...", ephemeral=True)
+                else:
+                    message = await ctx.send("That's not quite right...The code is: `{}` and the nation is: `{}`...right?".format(code, ns_nation.name), ephemeral=True)
 
-            res = await nerris.register_nation(nation, ctx.message)
+            res = await nerris.register_nation(ns_nation, ctx.message)
             await message.edit(content="There we go! I'll give you roles now...")
 
             await nerris.give_verified_roles(ctx.message.author)
             await message.edit(content="Done! I've given you all roles you can have!")
-        except InvalidCode_NSVerify as code:
-            await ctx.send("Oh no, you didn't role high enough it seems. {} isn't the right code!".format(code.args[0]), ephemeral=True)
+        except InvalidCode_NSVerify:
+            await ctx.send("Oh no, you didn't role high enough it seems. `{}` isn't the right code!".format(code), ephemeral=True)
         except (NoGuilds, NoRoles, NoMeanings, NoNation, NoCode_NSVerify):
             await ctx.send("There was an internal error...", ephemeral=True)
             raise
@@ -400,12 +408,12 @@ async def _verify_nation(message):
         except NoNation as Nation:
             await _message.edit(content="Oh I don't have the charactersheet for {}...".format(Nation.args[0].name))
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.is_owner()
 async def source(ctx):
     await ctx.send("You can find my source code here! {}".format(Nerris.SOURCE))
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 async def info(ctx):
     info_string = (
         "I'm Nerris Version {}!\n"
@@ -415,14 +423,14 @@ async def info(ctx):
     ).format(Nerris.__VERSION__)
     await ctx.send(info_string)
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.is_owner()
 async def sync(ctx):
     await nerris.tree.sync(guild=ctx.guild)
     await ctx.send("Synced Slash Commands to Server!")
 
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.is_owner()
 @commands.guild_only()
 async def link_region(ctx, region_name: str, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role]):
@@ -455,7 +463,7 @@ async def link_region(ctx, region_name: str, verified_role: Optional[discord.Rol
     except RoleOverwrite as Role:
         await ctx.send("Unfortuantely that would overwrite a role. Use `\link_roles` with overrwrite_roles set to True")
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.is_owner()
 @commands.guild_only()
 async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], overwrite_roles: Optional[bool] = False):
@@ -481,7 +489,7 @@ async def link_roles(ctx, verified_role: Optional[discord.Role], resident_role: 
         await ctx.send("Unfortuantely that would overwrite a role. Use `\link_roles` with overrwrite_roles set to True")
 
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.is_owner()
 @commands.guild_only()
 async def unlink_roles(ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role], remove_roles: Optional[bool] = True):
@@ -503,7 +511,7 @@ async def unlink_roles(ctx, verified_role: Optional[discord.Role], resident_role
         await ctx.send("You didn't give me any valid roles to remove from notes!...")
 
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.is_owner()
 @commands.guild_only()
 async def unlink_region(ctx, region_name: str):
@@ -511,12 +519,16 @@ async def unlink_region(ctx, region_name: str):
         ns_region = await nerris.ns_client.get_region(region_name.replace(" ", "_"))
         region = session.scalar(select(tbl.Region).where(tbl.Region.name == ns_region.name))
         guild = session.scalar(select(tbl.Guild).where(tbl.Guild.snowflake == ctx.guild.id))
-        if region and region in guild.regions:
-            guild.regions.remove(region)
+        if region is not None and guild is not None:
+            if region in guild.regions:
+                guild.regions.remove(region)
+                await ctx.send("I've gone ahead and removed that role from my notes!")
+                return
+            await ctx.send("I couldn't find that region...")
+        await ctx.send("I couldn't find that region or guild...")
 
-        await ctx.send("I've gone ahead and removed that role from my notes!")
 
-@nerris.hybrid_command()
+@nerris.hybrid_command() # type: ignore
 @commands.guild_only()
 async def unverify_nation(ctx, nation_name: str):
     with Session(nerris.db_engine) as session:
@@ -540,4 +552,4 @@ async def unverify_nation(ctx, nation_name: str):
     await ctx.send("I've removed your character sheet from my campaign notes.")
 
 
-nerris.run(os.environ.get("NERRIS_TOKEN"))
+nerris.run(os.environ["NERRIS_TOKEN"])

@@ -27,6 +27,9 @@ class NoMeanings(Exception):
 class NoNation(Exception):
     pass
 
+class NoUser(Exception):
+    pass
+
 
 class InvalidCode_NSVerify(Exception):
     pass

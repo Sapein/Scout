@@ -43,7 +43,7 @@ class NationStatesClient:
     def __init__(self, session: aiohttp.ClientSession, user_agent="NerrisBot-Suns_Reach"):
         self.user_agent = user_agent
         self.session = session
-        self.requests = Requests(Allowable(0,0), 0, 0, 0, 0, 0, 0)
+        self.requests = Requests(Allowable(0,0), 0, 0, 0, 0, 0, 0) # type: ignore
         self.headers = {'User-Agent': self.user_agent}
 
     def get_verify_url(self, token: Optional[str] = None):
@@ -75,12 +75,12 @@ class NationStatesClient:
             NationDoesNotExist("Nation with name: {} does not exist!".format(nation))
         return Nation(name, region)
 
-    async def verify(self, nation: Nation | str, code: str, token: Optional[str] = None) -> tuple[Nation, bool]:
+    async def verify(self, nation: Nation | str, code: str, token: Optional[str] = None) -> tuple[bool, Nation]:
         verify = '{}{}'.format(self.base_url, self.verify_shard)
         try:
-            verify = verify.format(nation.name.replace(" ", "_").casefold(), code)
+            verify = verify.format(nation.name.replace(" ", "_").casefold(), code) # type: ignore
         except AttributeError:
-            verify = verify.format(nation.replace(" ", "_").casefold(), code)
+            verify = verify.format(nation.replace(" ", "_").casefold(), code) # type: ignore
 
         verify = '{}&q=name+region'.format(verify)
 
@@ -92,8 +92,8 @@ class NationStatesClient:
             name = response.split("<NAME>")[1].split("</NAME>")[0]
             region = response.split("<REGION>")[1].split("</REGION>")[0]
             verified = response.split("<VERIFY>")[1].split("</VERIFY>")[0]
-        except KeyError:
-            raise NationDoesNotExist("Nation with name: {} does not exist!".format(nation))
+        except KeyError as err:
+            raise NationDoesNotExist("Nation with name: {} does not exist!".format(nation)) from err
         nation = Nation(name, region)
         return bool(int(verified)), nation
 
@@ -103,18 +103,18 @@ class NationStatesClient:
                 self.update_requests(response.headers)
                 if response.status != 429:
                     return await response.text()
-                else:
-                    return await self._make_request(url, headers)
+                return await self._make_request(url, headers)
         else:
             if self.requests.retry_after is not None:
                 await asyncio.sleep(self.requests.retry_after)
                 self.requests.retry_after = None
                 return await self._make_request(url, headers)
-            else:
-                sleep_time = datetime.utcnow() - self.requests.last_request
-                await asyncio.sleep(sleep_time)
-                self.requests.remaining = self.requests.limit
-                self.requests.request_count = 0
+
+            sleep_time = datetime.utcnow() - self.requests.last_request
+            await asyncio.sleep(sleep_time) # type: ignore
+            self.requests.remaining = self.requests.limit
+            self.requests.request_count = 0
+            return await self._make_request(url, headers)
 
 
     async def build(self) -> Self:
