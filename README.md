@@ -14,9 +14,13 @@ This bot mainly performs certain actions -- such as NationStates verification an
 - SQLAlchemy v2.0
 
 ## Quick Start
-To quickly get started with the bot, you must first register it as an application on the Discord Developer Portal
-and create a bot user, to get the API Token. After that you need to set the environment variable `NERRIS_TOKEN` for the
-shell. Then you can just install the current package and run `python3 -m Nerris.nerris`
+To quickly get started with Nerris, you first need to register a bot with discord and get the API Key. After that,
+you can take `default_config.toml` and create a copy named `nerris.toml` and put the API key in the config file. 
+
+After that, you need to fill out the config file for use, and then simply install the package with `python -m pip install .`.
+You can then start Nerris with `python3 -m Nerris.nerris`. 
+
+For a more 'robust' setup please see the documentation.
 
 ## Development Setup
 To simplify this you can just do `pip install -e .[dev]` and it will install the development dependencies, without
