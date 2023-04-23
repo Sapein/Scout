@@ -40,7 +40,7 @@ def toml_setup(path: str):
     try:
         with open(path, 'rb') as file:
             return tomllib.load(file)
-    except tomllib.TOMLDecodeError:
+    except (tomllib.TOMLDecodeError, FileNotFoundError):
         return {}
 
 
@@ -131,10 +131,14 @@ def pythonize_env(env_config):
         raise ValueError("You MUST provide a dialect. Use 'sqlite' if you don't know what this means.")
 
     if "DB_LOGIN" not in env_config:
-        env_config["DB_LOGIN"] = {'user': env_config["DB_USER"], 'password': env_config["DB_PASS"]}
+        env_config["DB_LOGIN"] = {'user': env_config.get("DB_USER", None), 'password': env_config.get("DB_PASS", None)}
 
     if "DB_CONN" not in env_config:
-        env_config["DB_CONN"] = {'host': env_config["DB_HOST"], 'port': int(env_config["DB_PORT"])}
+        try:
+            env_config["DB_CONN"] = {'host': env_config.get("DB_HOST", None), 'port': int(env_config.get("DB_PORT", None))}
+        except TypeError:
+            env_config["DB_CONN"] = {'host': env_config.get("DB_HOST", None), 'port': None}
+    return env_config
 
 def load_configuration():
     """

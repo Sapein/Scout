@@ -43,7 +43,7 @@ def create_user_agent(contact_info: str, nation: str, region: Optional[str]):
                                                           c=contact_info)
 
 class NationStatesClient:
-    api_version = 11
+    api_version = 12
     base_url = "https://nationstates.net/cgi-bin/api.cgi?"
     version_shard = "a=version"
     nation_shard = "nation={}"

@@ -12,6 +12,7 @@ import aiohttp
 import discord
 from discord.ext import commands
 
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -37,10 +38,12 @@ class NerrisBot(commands.Bot):
     The main Discord Bot Class
     """
     config: dict[str, Any]
-    db_engine = db.connect(in_memory=True)
+    db_engine: Engine
+    aiohttp_session: aiohttp.ClientSession
     users_verifying: dict[Any, Any] = {}
     meaning_ids = {RoleTypes.VERIFIED.value: None,
                    RoleTypes.RESIDENT.value: None}
+
 
     async def on_ready(self):
         self.aiohttp_session = aiohttp.ClientSession()
@@ -49,10 +52,16 @@ class NerrisBot(commands.Bot):
                                           self.config["REGION"])
         self.ns_client = await ns.NationStatesClient(self.aiohttp_session,
                                                      user_agent=user_agent).build()
+        self.db_engine = db.db_connect(dialect=self.config["DB_DIALECT"],
+                                       driver=self.config.get("DB_DRIVER", None),
+                                       table=self.config.get("DB_TABLE", None),
+                                       login=self.config.get("DB_LOGIN", {'user': None, 'password': None}),
+                                       connect=self.config.get("DB_CONN", {'host': None, 'port': None}))
         print("We are logged in as {}".format(self.user))
         Base.metadata.create_all(self.db_engine)
         self.register_meanings()
         await self.tree.sync()
+
 
     def register_meanings(self):
         with Session(self.db_engine) as session:
@@ -527,7 +536,7 @@ async def unlink_region(ctx, region_name: str):
         if region is not None and guild is not None:
             if region in guild.regions:
                 guild.regions.remove(region)
-                await ctx.send("I've gone ahead and removed that role from my notes!")
+                await ctx.send("I've removed this region from my maps!")
                 return
             await ctx.send("I couldn't find that region...")
         await ctx.send("I couldn't find that region or guild...")
