@@ -5,7 +5,6 @@ This contains all the main 'logic' for the Discord Bot part of things.
 """
 
 import asyncio
-import os
 
 from typing import Self, Optional, Any
 
@@ -17,6 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 import Nerris
+from Nerris import config
 from Nerris.database.base import Base
 from Nerris.database import tables as tbl
 from Nerris.database import db
@@ -36,14 +36,19 @@ class NerrisBot(commands.Bot):
     """
     The main Discord Bot Class
     """
+    config: dict[str, Any]
     db_engine = db.connect(in_memory=True)
     users_verifying: dict[Any, Any] = {}
     meaning_ids = {RoleTypes.VERIFIED.value: None,
                    RoleTypes.RESIDENT.value: None}
 
-    async def on_ready(self, *args, **kwargs):
+    async def on_ready(self):
         self.aiohttp_session = aiohttp.ClientSession()
-        self.ns_client = await ns.NationStatesClient(self.aiohttp_session).build()
+        user_agent = ns.create_user_agent(self.config["CONTACT_INFO"],
+                                          self.config["NATION"],
+                                          self.config["REGION"])
+        self.ns_client = await ns.NationStatesClient(self.aiohttp_session,
+                                                     user_agent=user_agent).build()
         print("We are logged in as {}".format(self.user))
         Base.metadata.create_all(self.db_engine)
         self.register_meanings()
@@ -552,4 +557,5 @@ async def unverify_nation(ctx, nation_name: str):
     await ctx.send("I've removed your character sheet from my campaign notes.")
 
 
-nerris.run(os.environ["NERRIS_TOKEN"])
+nerris.config = config.load_configuration()
+nerris.run(nerris.config["DISCORD_API_KEY"])

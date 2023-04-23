@@ -6,6 +6,7 @@ from typing import Optional, Self
 
 import aiohttp
 
+import Nerris
 from Nerris.nationstates.region import Region
 from Nerris.nationstates.nation import Nation
 from Nerris.nationstates.exceptions import *
@@ -28,6 +29,18 @@ class Requests:
     request_count: int
 
     retry_after: Optional[int]
+
+def create_user_agent(contact_info: str, nation: str, region: Optional[str]):
+    """
+    Takes in the information and creates a user agent.
+    """
+    if region:
+        return "Nerris-Bot/{v} Nation-{n} for Region-{r} Contact-{c}".format(v=Nerris.__VERSION__,
+                                                                             n=nation,
+                                                                             r=region,
+                                                                             c=contact_info)
+    return "Nerris-Bot/{v} Nation-{n} Contact-{c}".format(v=Nerris.__VERSION__, n=nation,
+                                                          c=contact_info)
 
 class NationStatesClient:
     api_version = 11

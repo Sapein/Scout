@@ -1,0 +1,32 @@
+# This is a sample configuration file for Nerris.
+# This is not strictly needed and is provided for convience.
+# Copy and rename this file to 'nerris.toml' to use.
+
+# If you are using environment variables, do NOT use this.
+
+[bot]
+# Discord/Bot related information
+[bot.commands]
+PREFIXES = [ ".", ",", "I roll for ", "I cast" ]
+ALLOW_PREFIXLESS_IN_DMS = false
+ALLOW_PING_AS_PREFIX = true
+
+[api]
+[api.discord]
+# Insert your API Key Here
+API_KEY = ""
+
+[api.nationstates]
+NATION = "" # Put your nation name here. This is required.
+CONTACT_INFO = "" # Put your contact information here. This is required.
+REGION = "" # If you are running this bot for a server, you can put the regional information here.
+
+
+# Currently we only support sql.
+[database]
+[database.sql]
+DIALECT = "sqlite" #The 'type' of sql you're using. sqlite, postgresql, mysql.
+DRIVER = "" # This is the 'driver' to use. I would recommend leaving this alone.
+TABLE = "" # The table to use for the database. For sqlite this is the path to the file.
+LOGIN = { user = "", password = "" } # This only matters for non-sqlite databases.
+CONNECTION = { host = "", port = 0 } # This only matters for non-sqlite databases.
