@@ -2,14 +2,14 @@ version: "3.9"
 services:
   nerris:
     build:
-      context: .
+      context: ./
       dockerfile_inline: |
-        FROM docker.io/library/python:3.11.3-alpine
-        COPY requirements_compose.txt /tmp
-        RUN pip install -r /tmp/requirements_compose.txt
-        COPY . /nerris
-        RUN pip install /nerris[postgres]
-        CMD ["python3", "-m", "Nerris.nerris"]
+          FROM docker.io/library/python:3.11.3-alpine
+          COPY requirements_compose.txt /tmp
+          RUN pip install -r /tmp/requirements_compose.txt
+          COPY . /nerris
+          RUN pip install /nerris[postgresql]
+          CMD ["python3", "-m", "Nerris.nerris"]
 
     env_file: .env
     depends_on:
