@@ -1,0 +1,47 @@
+version: "3.9"
+services:
+  nerris:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM docker.io/library/python:3.11.3-alpine
+        COPY requirements_compose.txt /tmp
+        RUN pip install -r /tmp/requirements_compose.txt
+        COPY . /nerris
+        RUN pip install /nerris[postgres]
+        CMD ["python3", "-m", "Nerris.nerris"]
+
+    env_file: .env
+    depends_on:
+      - db
+    networks:
+      - public
+      - db
+    environment:
+      DB_DIALECT: 'postgresql'
+      DB_DRIVER: 'psycopg'
+      DB_TABLE: 'nerris'
+      DB_USER: 'postgres'
+      DB_PASS: 'postgres'
+      DB_HOST: 'db'
+  db:
+    image: postgres:15.2-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - db:/var/lib/pgsql/data
+    networks:
+      - db
+
+volumes:
+  db:
+
+networks:
+  public:
+    internal: false
+  db:
+    name: nerris_db
+    attachable: true
+    internal: true
+
