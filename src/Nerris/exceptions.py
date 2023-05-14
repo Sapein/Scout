@@ -1,6 +1,9 @@
 class InvalidMeaning(Exception):
     pass
 
+class MeaningRegistered(Exception):
+    pass
+
 class InvalidGuild(Exception):
     pass
 

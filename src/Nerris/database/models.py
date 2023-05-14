@@ -1,27 +1,26 @@
 """
 """
-
-from typing import Optional
-from sqlalchemy import Table, Column, ForeignKey, Identity, Text
+import sqlalchemy.sql.functions
+from sqlalchemy import Table, Column, ForeignKey, Identity, Text, DateTime
 from sqlalchemy.orm import Mapped, relationship, mapped_column
+
 from Nerris.database.base import Base
 
-UserNation = Table(
+user_nation = Table(
     "user_nations",
     Base.metadata,
     Column("nation_id", ForeignKey("nations.id"), primary_key=True),
     Column("user_id", ForeignKey("users.id"), primary_key=True)
 )
 
-GuildRegion = Table(
+guild_region = Table(
     "guild_regions",
     Base.metadata,
     Column("region_id", ForeignKey("regions.id"), primary_key=True),
     Column("guild_id", ForeignKey("guilds.id"), primary_key=True)
 )
 
-
-RoleMeaning = Table(
+role_meaning = Table(
     "role_meanings",
     Base.metadata,
     Column("meaning_id", ForeignKey("meanings.id"), primary_key=True),
@@ -33,19 +32,21 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    snowflake: Mapped[int]
+    snowflake: Mapped[int] = mapped_column(unique=True)
 
-    nations: Mapped[set["Nation"]] = relationship(secondary=UserNation, back_populates="users", cascade="save-update, merge, delete")
+    nations: Mapped[set["Nation"]] = relationship(secondary=user_nation, back_populates="users",
+                                                  cascade="save-update, merge, delete")
 
 
 class Guild(Base):
     __tablename__ = "guilds"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    snowflake: Mapped[int]
+    snowflake: Mapped[int] = mapped_column(unique=True, index=True)
 
-    regions: Mapped[set["Region"]] = relationship(secondary=GuildRegion, back_populates="guilds")
-    roles: Mapped[set["Role"]] = relationship(back_populates="guild", cascade="save-update, merge, delete, delete-orphan")
+    regions: Mapped[set["Region"]] = relationship(secondary=guild_region, back_populates="guilds")
+    roles: Mapped[set["Role"]] = relationship(back_populates="guild",
+                                              cascade="save-update, merge, delete, delete-orphan")
 
 
 class Role(Base):
@@ -56,7 +57,7 @@ class Role(Base):
 
     guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"))
 
-    meanings: Mapped[set["Meaning"]] = relationship(secondary=RoleMeaning, back_populates="roles")
+    meanings: Mapped[set["Meaning"]] = relationship(secondary=role_meaning, back_populates="roles")
     guild: Mapped["Guild"] = relationship(back_populates="roles")
 
 
@@ -66,19 +67,21 @@ class Meaning(Base):
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     meaning: Mapped[str] = mapped_column(Text)
 
-    roles: Mapped[set["Role"]] = relationship(secondary=RoleMeaning, back_populates="meanings", cascade="save-update, merge, delete")
+    roles: Mapped[set["Role"]] = relationship(secondary=role_meaning, back_populates="meanings",
+                                              cascade="save-update, merge, delete")
 
 
 class Nation(Base):
     __tablename__ = "nations"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(index=True, unique=True)
+    private: Mapped[bool] = mapped_column(default=False)
+    added_on: Mapped[DateTime] = mapped_column(server_default=sqlalchemy.sql.functions.now())
 
     region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"))
 
-
-    users: Mapped[set["User"]] = relationship(secondary=UserNation, back_populates="nations")
+    users: Mapped[set["User"]] = relationship(secondary=user_nation, back_populates="nations")
     region: Mapped["Region"] = relationship(back_populates="nations")
 
 
@@ -86,11 +89,11 @@ class Region(Base):
     __tablename__ = "regions"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(index=True, unique=True)
 
-    nations: Mapped[set["Nation"]] = relationship(back_populates="region", cascade="save-update, merge, delete, delete-orphan")
-    guilds: Mapped[set["Guild"]] = relationship(secondary=GuildRegion, back_populates="regions")
-
+    nations: Mapped[set["Nation"]] = relationship(back_populates="region",
+                                                  cascade="save-update, merge, delete, delete-orphan")
+    guilds: Mapped[set["Guild"]] = relationship(secondary=guild_region, back_populates="regions")
 
 # class RegionalMessageBoard(Base):
 #     __tablename__ = "rmb"

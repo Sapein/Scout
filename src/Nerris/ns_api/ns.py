@@ -3,20 +3,21 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional, Self
 
-
 import aiohttp
 
 import Nerris
-from Nerris.nationstates.region import Region
-from Nerris.nationstates.nation import Nation
-from Nerris.nationstates.exceptions import *
+from Nerris.ns_api.region import Region
+from Nerris.ns_api.nation import Nation
+from Nerris.ns_api.exceptions import *
 
 __all__ = ["NationStatesClient"]
+
 
 @dataclass(frozen=True)
 class Allowable:
     amount: int
     seconds: int
+
 
 @dataclass
 class Requests:
@@ -30,6 +31,7 @@ class Requests:
 
     retry_after: Optional[int]
 
+
 def create_user_agent(contact_info: str, nation: str, region: Optional[str]):
     """
     Takes in the information and creates a user agent.
@@ -41,6 +43,7 @@ def create_user_agent(contact_info: str, nation: str, region: Optional[str]):
                                                                              c=contact_info)
     return "Nerris-Bot/{v} Nation-{n} Contact-{c}".format(v=Nerris.__VERSION__, n=nation,
                                                           c=contact_info)
+
 
 class NationStatesClient:
     api_version = 12
@@ -56,7 +59,7 @@ class NationStatesClient:
     def __init__(self, session: aiohttp.ClientSession, user_agent="NerrisBot-Suns_Reach"):
         self.user_agent = user_agent
         self.session = session
-        self.requests = Requests(Allowable(0,0), 0, 0, 0, 0, 0, 0) # type: ignore
+        self.requests = Requests(Allowable(0, 0), 0, 0, 0, 0, 0, 0)  # type: ignore
         self.headers = {'User-Agent': self.user_agent}
 
     def get_verify_url(self, token: Optional[str] = None):
@@ -76,7 +79,6 @@ class NationStatesClient:
 
         return Region(name)
 
-
     async def get_nation(self, nation: str) -> Nation:
         url = '{}{}'.format(self.base_url, self.nation_shard.format(nation.replace(" ", "_").casefold()))
 
@@ -91,9 +93,9 @@ class NationStatesClient:
     async def verify(self, nation: Nation | str, code: str, token: Optional[str] = None) -> tuple[bool, Nation]:
         verify = '{}{}'.format(self.base_url, self.verify_shard)
         try:
-            verify = verify.format(nation.name.replace(" ", "_").casefold(), code) # type: ignore
+            verify = verify.format(nation.name.replace(" ", "_").casefold(), code)  # type: ignore
         except AttributeError:
-            verify = verify.format(nation.replace(" ", "_").casefold(), code) # type: ignore
+            verify = verify.format(nation.replace(" ", "_").casefold(), code)  # type: ignore
 
         verify = '{}&q=name+region'.format(verify)
 
@@ -124,11 +126,10 @@ class NationStatesClient:
                 return await self._make_request(url, headers)
 
             sleep_time = datetime.utcnow() - self.requests.last_request
-            await asyncio.sleep(sleep_time) # type: ignore
+            await asyncio.sleep(sleep_time)  # type: ignore
             self.requests.remaining = self.requests.limit
             self.requests.request_count = 0
             return await self._make_request(url, headers)
-
 
     async def build(self) -> Self:
         await self._check_version()
@@ -147,8 +148,8 @@ class NationStatesClient:
         seconds = int(seconds.split("=")[1])
         amount = int(amount)
 
-        self.requests = Requests(Allowable(amount, seconds), limit, remaining, reset, datetime.utcnow(), self.requests.request_count + 1, retry_after)
-
+        self.requests = Requests(Allowable(amount, seconds), limit, remaining, reset, datetime.utcnow(),
+                                 self.requests.request_count + 1, retry_after)
 
     async def _check_version(self):
         async with self.session.get('{}{}'.format(self.base_url, self.version_shard), headers=self.headers) as response:
@@ -156,9 +157,11 @@ class NationStatesClient:
             version = int(await response.text())
 
             if version != self.api_version and not self._allow_api_mismatch:
-                raise BaseException("NationStates API Version: {} is not equal to expected version {}! Please Update the NS Client!".format(version, self.api_version))
+                raise BaseException(
+                    "NationStates API Version: {} is not equal to expected version {}! Please Update the NS Client!".format(
+                        version, self.api_version))
             elif version != self.api_version:
-                #TODO: Log here
+                # TODO: Log here
                 pass
 
             self.update_requests(response.headers)
