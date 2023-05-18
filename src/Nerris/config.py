@@ -8,6 +8,7 @@ from typing import Optional
 
 import dotenv
 
+
 def default_values() -> dict[str, str]:
     """
     Returns the default values.
@@ -48,6 +49,7 @@ def toml_flatten(toml_config):
     """
     Flattens TOML to the env_var format.
     """
+
     def check_str(value: str, name: str = "") -> str:
         if value.strip():
             return value
@@ -81,10 +83,12 @@ def toml_flatten(toml_config):
         "DB_CONN": toml_config['bot']['database']['sql']['CONNECTION']
     }
 
+
 def pythonize_env(env_config):
     """
     Turns the environment variable values into actual python types.
     """
+
     def check_str(value: str, name: str = "") -> str:
         if value.strip():
             return value
@@ -120,7 +124,6 @@ def pythonize_env(env_config):
                 except (IndexError, ValueError):
                     env_config[key] = {'host': val.split(":")[0], 'port': None}
 
-
     if "NATION" not in env_config or not env_config["NATION"].strip():
         raise ValueError("You MUST pass in a Nation!")
 
@@ -135,10 +138,12 @@ def pythonize_env(env_config):
 
     if "DB_CONN" not in env_config:
         try:
-            env_config["DB_CONN"] = {'host': env_config.get("DB_HOST", None), 'port': int(env_config.get("DB_PORT", None))}
+            env_config["DB_CONN"] = {'host': env_config.get("DB_HOST", None),
+                                     'port': int(env_config.get("DB_PORT", None))}
         except TypeError:
             env_config["DB_CONN"] = {'host': env_config.get("DB_HOST", None), 'port': None}
     return env_config
+
 
 def load_configuration():
     """
