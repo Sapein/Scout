@@ -168,7 +168,7 @@ class NSVerify(commands.Cog):
                 raise
 
     @commands.Cog.listener('on_message')
-    async def verify_nation(self, message):
+    async def verify_nation_msg(self, message):
         if message.guild is not None or message.author.name in self.users_verifying:
             return
         (nation, _message) = self.users_verifying[message.author.name]
@@ -296,13 +296,13 @@ class NSVerify(commands.Cog):
 
     @staticmethod
     async def ineligible_nsv_roles(eligible_role: str | None) -> list[str]:
-        match eligible_role:
-            case None:
-                return [RESIDENT, VERIFIED]
-            case RESIDENT():
-                return [VERIFIED]
-            case VERIFIED():
-                return [RESIDENT]
+        if eligible_role == RESIDENT:
+            return [VERIFIED]
+        elif eligible_role == VERIFIED:
+            return [RESIDENT]
+        else:
+            return [RESIDENT, VERIFIED]
+
 
     async def give_verified_roles(self, user: discord.User | discord.Member, guild: Optional[discord.Guild] = None):
         with Session(self.nerris.database.engine) as session:
