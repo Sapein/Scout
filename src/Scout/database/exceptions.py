@@ -1,6 +1,6 @@
 class DBError(Exception):
     """
-    This represents all Nerris-Specific Database errors that can occur.
+    This represents all Scout-Specific Database errors that can occur.
     """
     pass
 

@@ -1,15 +1,15 @@
 version: "3.9"
 services:
-  nerris:
+  scout:
     build:
       context: ./
       dockerfile_inline: |
           FROM docker.io/library/python:3.11.3-alpine
           COPY requirements_compose.txt /tmp
           RUN pip install -r /tmp/requirements_compose.txt
-          COPY . /nerris
-          RUN pip install /nerris[postgresql]
-          CMD ["python3", "-m", "Nerris.nerris"]
+          COPY . /scout
+          RUN pip install /scout[postgresql]
+          CMD ["python3", "-m", "Scout.scout"]
 
     env_file: .env
     depends_on:
@@ -20,7 +20,7 @@ services:
     environment:
       DB_DIALECT: 'postgresql'
       DB_DRIVER: 'psycopg'
-      DB_TABLE: 'nerris'
+      DB_TABLE: 'scout'
       DB_USER: 'postgres'
       DB_PASS: 'postgres'
       DB_HOST: 'db'
@@ -41,7 +41,7 @@ networks:
   public:
     internal: false
   db:
-    name: nerris_db
+    name: scout_db
     attachable: true
     internal: true
 

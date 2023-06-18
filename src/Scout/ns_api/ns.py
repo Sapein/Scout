@@ -5,10 +5,10 @@ from typing import Optional, Self
 
 import aiohttp
 
-import Nerris
-from Nerris.ns_api.region import Region
-from Nerris.ns_api.nation import Nation
-from Nerris.ns_api.exceptions import *
+import Scout
+from Scout.ns_api.region import Region
+from Scout.ns_api.nation import Nation
+from Scout.ns_api.exceptions import *
 
 __all__ = ["NationStatesClient"]
 
@@ -37,11 +37,11 @@ def create_user_agent(contact_info: str, nation: str, region: Optional[str]):
     Takes in the information and creates a user agent.
     """
     if region:
-        return "Nerris-Bot/{v} Nation-{n} for Region-{r} Contact-{c}".format(v=Nerris.__VERSION__,
+        return "Scout-Bot/{v} Nation-{n} for Region-{r} Contact-{c}".format(v=Scout.__VERSION__,
                                                                              n=nation,
                                                                              r=region,
                                                                              c=contact_info)
-    return "Nerris-Bot/{v} Nation-{n} Contact-{c}".format(v=Nerris.__VERSION__, n=nation,
+    return "Scout-Bot/{v} Nation-{n} Contact-{c}".format(v=Scout.__VERSION__, n=nation,
                                                           c=contact_info)
 
 
@@ -56,7 +56,7 @@ class NationStatesClient:
     requests: Requests
     _allow_api_mismatch = False
 
-    def __init__(self, session: aiohttp.ClientSession, user_agent="NerrisBot-Suns_Reach"):
+    def __init__(self, session: aiohttp.ClientSession, user_agent="ScoutBot-Suns_Reach"):
         self.user_agent = user_agent
         self.session = session
         self.requests = Requests(Allowable(0, 0), 0, 0, 0, 0, 0, 0)  # type: ignore

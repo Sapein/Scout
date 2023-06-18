@@ -1,5 +1,5 @@
 """
-Handles configuration for Nerris
+Handles configuration for Scout
 """
 
 import tomllib
@@ -14,7 +14,7 @@ def default_values() -> dict[str, str]:
     Returns the default values.
     """
     return {
-        "CONFIG_FILE": "nerris.toml",
+        "CONFIG_FILE": "scout.toml",
         "PREFIXES": ".:,:I cast:I roll for",
         "PREFIXLESS_DMS": "False",
         "PING_PREFIX": "True",

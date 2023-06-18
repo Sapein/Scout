@@ -5,8 +5,8 @@ COPY requirements.txt /tmp
 
 RUN pip install -r /tmp/requirements.txt
 
-COPY . /nerris
+COPY . /scout
 
-RUN pip install /nerris
+RUN pip install /scout
 
-CMD ["python3", "-m", "Nerris.nerris"]
+CMD ["python3", "-m", "Scout.scout"]

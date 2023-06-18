@@ -1,5 +1,5 @@
 """
-The main module for Nerris.
+The main module for Scout.
 
 This contains all the main 'logic' for the Discord Bot part of things.
 """
@@ -11,11 +11,11 @@ import discord
 from discord.ext import commands
 from sqlalchemy.orm import Session
 
-import Nerris
-from Nerris import config
-from Nerris.database import db
-from Nerris.database.base import Base
-from Nerris.exceptions import *
+import Scout
+from Scout import config
+from Scout.database import db
+from Scout.database.base import Base
+from Scout.exceptions import *
 
 intents = discord.Intents.default()
 
@@ -24,7 +24,7 @@ intents.members = True
 intents.presences = True
 
 
-class NerrisBot(commands.Bot):
+class ScoutBot(commands.Bot):
     """
     The main Discord Bot Class
     """
@@ -42,7 +42,7 @@ class NerrisBot(commands.Bot):
                                     connect=self.config.get("DB_CONN", {'host': None, 'port': None}))
         print("We are logged in as {}".format(self.user))
         Base.metadata.create_all(self.engine)
-        await self.load_extension("Nerris.core.nationstates.nsverify")
+        await self.load_extension("Scout.core.nationstates.nsverify")
         await self.tree.sync()
 
     def register_meaning(self, meaning: str, *, suppress_error=False, session: Optional[Session] = None):
@@ -65,56 +65,56 @@ class NerrisBot(commands.Bot):
 
 
 _config = config.load_configuration()
-nerris = NerrisBot(command_prefix=_config["PREFIXES"], intents=intents)
-nerris.config = _config
+scout = ScoutBot(command_prefix=_config["PREFIXES"], intents=intents)
+scout.config = _config
 
 
-@nerris.listen('on_guild_role_update')
+@scout.listen('on_guild_role_update')
 async def update_stored_roles(before: discord.Role, after: discord.Role):
-    with Session(nerris.database.engine) as session:
+    with Session(scout.database.engine) as session:
         role_db = db.get_role(before.id, snowflake_only=True, session=session)
         if before.id != after.id and role_db:
             role_db.snowflake = after.id
             session.commit()
 
 
-@nerris.listen('on_guild_role_delete')
+@scout.listen('on_guild_role_delete')
 async def remove_stored_roles(role: discord.Role):
-    with Session(nerris.database.engine) as session:
+    with Session(scout.database.engine) as session:
         db.remove_role(role.id, snowflake_only=True, session=session)
 
 
-@nerris.listen('on_guild_remove')
+@scout.listen('on_guild_remove')
 async def remove_guild_info(guild: discord.Guild):
-    with Session(nerris.database.engine) as session:
+    with Session(scout.database.engine) as session:
         db.remove_guild(guild.id, snowflake_only=True, session=session)
 
 
-@nerris.hybrid_command()  # type: ignore
+@scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def source(ctx):
-    await ctx.send("You can find my source code here! {}".format(Nerris.SOURCE))
+    await ctx.send("You can find my source code here! {}".format(Scout.SOURCE))
 
 
-@nerris.hybrid_command()  # type: ignore
+@scout.hybrid_command()  # type: ignore
 async def info(ctx):
     info_string = (
-        "Hi, I'm Nerris!\n"
-        "I am currently Nerris Version {}.\n"
+        "Hi, I'm Scout!\n"
+        "I am currently Scout Version {}.\n"
         "I am a bot created for The Campfire discord server and the associated NS region Sun's Reach!\n"
         "I mostly just help manage nation verification at this time.\n"
         "I am Open-Source with my source code available on Github.\n"
         "If you wish to read my source code, please go to: {}\n"
         "Now where did my D20 go..."
-    ).format(Nerris.__VERSION__, Nerris.SOURCE)
+    ).format(Scout.__VERSION__, Scout.SOURCE)
     await ctx.send(info_string)
 
 
-@nerris.hybrid_command()  # type: ignore
+@scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def sync(ctx):
-    await nerris.tree.sync(guild=ctx.guild)
+    await scout.tree.sync(guild=ctx.guild)
     await ctx.send("Synced Slash Commands to Server!")
 
 
-nerris.run(nerris.config["DISCORD_API_KEY"])
+scout.run(scout.config["DISCORD_API_KEY"])

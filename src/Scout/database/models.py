@@ -4,7 +4,7 @@ import sqlalchemy.sql.functions
 from sqlalchemy import Table, Column, ForeignKey, Identity, Text, DateTime
 from sqlalchemy.orm import Mapped, relationship, mapped_column
 
-from Nerris.database.base import Base
+from Scout.database.base import Base
 
 user_nation = Table(
     "user_nations",

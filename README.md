@@ -1,5 +1,5 @@
-# Nerris Bot
-  Nerris is an Open Source Discord Bot written in Python 3, primarily for The Campfire Discord server.
+# Scout Bot
+  Scout is an Open Source Discord Bot written in Python 3, primarily for The Campfire Discord server.
 This bot mainly performs certain actions -- such as NationStates verification and aims to be complete, but fast.
 
 ## Features
@@ -14,11 +14,11 @@ This bot mainly performs certain actions -- such as NationStates verification an
 - SQLAlchemy v2.0
 
 ## Quick Start
-To quickly get started with Nerris, you first need to register a bot with discord and get the API Key. After that,
-you can take `default_config.toml` and create a copy named `nerris.toml` and put the API key in the config file. 
+To quickly get started with Scout, you first need to register a bot with discord and get the API Key. After that,
+you can take `default_config.toml` and create a copy named `scout.toml` and put the API key in the config file. 
 
 After that, you need to fill out the config file for use, and then simply install the package with `python -m pip install .`.
-You can then start Nerris with `python3 -m Nerris.nerris`. 
+You can then start Scout with `python3 -m Scout.scout`. 
 
 For a more 'robust' setup please see the documentation.
 
@@ -33,10 +33,15 @@ The source code within this repository is licensed under the AGPL v3 license,
 all non-code work is licensed under the CC-BY-NC-SA 4.0 License as well.
 
 # QnA/FaQ
-### What's with the name "Nerris"?  
-Nerris is a character off of the show Camp Camp produced by Rooster Teeth. I particularly like Nerris as a character,
-and given that the alternatives weren't really that great, and that the character fit the theme of The Campfire, I chose
-it because no one could get behind a singular name.
+### What's with the name "Scout"?
+The name Scout is the name for the bot, based off of the fact that this bot was initially constructed for The Campfire,
+a Camp-themed Discord Server. The initial branding used the name "Nerris", which is a character from the show Camp Camp,
+which is produced by Rooster Teeth. I personally like the character, but using a character that I do not own the rights
+too is probably not the best idea.
+
+### What happened to Nerris?
+Since I don't own the branding/rights to Nerris, the bot was rebranded to Scout -- paying homage to the origin and also
+being somewhat unique for Discord Bots.
 
 ### Why not use Poetry?  
 Because it doesn't follow the standards as set forth by the various PEPs around packaging. When it does, I'll consider it.
@@ -52,7 +57,7 @@ If this meets your needs! This bot is not for everyone, and currently only reall
 and giving roles based upon that verification. That's about it. 
 
 However, if the current bot(s) to do NationStates verification aren't really up to snuff for you, and you're potentially
-fine with self-hosting, feel free to use Nerris and also to contribute!
+fine with self-hosting, feel free to use Scout and also to contribute!
 
 ### Should I use this over X?  
 At the moment, probably not. While most things are stable, the bot is still in a very early state and there are some potential
@@ -64,7 +69,7 @@ Because the bot is currently under heavy development. Also the initial version i
 It's a relatively basic implementation of what is needed specifically for 'The Campfire' and nothing more. I do intend on adding
 more features over-time, however we have to start somewhere.
 
-If you see a feature you need, and want to use Nerris feel free to request it, just keep in mind it might not happen right away,
+If you see a feature you need, and want to use Scout feel free to request it, just keep in mind it might not happen right away,
 that is unless you also wish to submit a PR for that feature.
 
 ### Why is this project open sourced?  

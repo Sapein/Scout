@@ -8,8 +8,8 @@ from sqlalchemy import create_engine, select, or_, inspect
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
-import Nerris.database.exceptions
-import Nerris.database.models as models
+import Scout.database.exceptions
+import Scout.database.models as models
 
 
 def db_connect(dialect: str, driver: Optional[str], table: Optional[str], login: dict[str, Optional[str]],
@@ -46,7 +46,7 @@ def remove_user(user: int | models.User, *, session: Session):
     if isinstance(user, int):
         userdb = session.scalar(select(models.User).where(models.User.id == user))
         if userdb is None:
-            raise Nerris.database.exceptions.UserNotFound("User with user ID {} not found!".format(user))
+            raise Scout.database.exceptions.UserNotFound("User with user ID {} not found!".format(user))
         user = userdb
     session.delete(user)
 
@@ -56,13 +56,13 @@ def register_nation(nation: str, *, region_info: models.Region | int | str,
     if isinstance(region_info, str):
         output = session.scalar(select(models.Region.id).where(models.Region.name == region_info))
         if output is None:
-            raise Nerris.database.exceptions.RegionNameNotFound(
+            raise Scout.database.exceptions.RegionNameNotFound(
                 "Region with name {} can not be found in db".format(region_info))
         region_info = output
 
     elif isinstance(region_info, int):
         if not session.scalar(select(models.Region.id).where(models.Region.id == region_info)):
-            raise Nerris.database.exceptions.RegionIdNotFound(
+            raise Scout.database.exceptions.RegionIdNotFound(
                 "Region with ID {} not found in database".format(region_info))
 
     elif isinstance(region_info, models.Region):
@@ -75,7 +75,7 @@ def remove_nation(nation: int | models.Nation, *, session: Session):
     if isinstance(nation, int):
         nationdb = session.scalar(select(models.Nation).where(models.Nation.id == nation))
         if nationdb is None:
-            raise Nerris.database.exceptions.NationNotFound("Nation with ID {} not found".format(nation))
+            raise Scout.database.exceptions.NationNotFound("Nation with ID {} not found".format(nation))
         nation = nationdb
     session.delete(nation)
 
@@ -104,7 +104,7 @@ def remove_guild(guild: int | models.Guild, *, snowflake_only=False, session: Se
     if isinstance(guild, int):
         guild_db = get_guild(guild, snowflake_only=snowflake_only, session=session)
         if guild_db is None:
-            raise Nerris.database.exceptions.GuildNotFound("Guild with id {} not found!".format(guild))
+            raise Scout.database.exceptions.GuildNotFound("Guild with id {} not found!".format(guild))
         guild = guild_db
     session.delete(guild)
 
@@ -119,7 +119,7 @@ def remove_region(region: int | models.Guild, *, session: Session):
     if isinstance(region, int):
         region_db = get_region(region, session=session)
         if region_db is None:
-            raise Nerris.database.exceptions.RegionNotFound("Region with id {} not found!".format(region))
+            raise Scout.database.exceptions.RegionNotFound("Region with id {} not found!".format(region))
         region = region_db
     session.delete(region)
 
@@ -156,7 +156,7 @@ def remove_role(role: int | models.Role, *, snowflake_only=False, session: Sessi
     if isinstance(role, int):
         role_db = get_role(role, snowflake_only=snowflake_only, session=session)
         if role_db is None:
-            raise Nerris.database.exceptions.RoleNotFound("Role with id: {} not found!".format(role))
+            raise Scout.database.exceptions.RoleNotFound("Role with id: {} not found!".format(role))
         role = role_db
     session.delete(role)
 
@@ -222,7 +222,7 @@ def update_role(role: int | models.Role, new_snowflake: int, *, snowflake_only=F
     if isinstance(role, int):
         role = get_role(role, snowflake_only=snowflake_only, session=session)
         if role is not None:
-            raise Nerris.database.exceptions.RoleNotFound("Role with ID or Snowflake {} not found!".format(role))
+            raise Scout.database.exceptions.RoleNotFound("Role with ID or Snowflake {} not found!".format(role))
 
     role.snowflake = new_snowflake
     return role

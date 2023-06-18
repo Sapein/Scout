@@ -1,6 +1,6 @@
-# This is a sample configuration file for Nerris.
+# This is a sample configuration file for Scout.
 # This is not strictly needed and is provided for convience.
-# Copy and rename this file to 'nerris.toml' to use.
+# Copy and rename this file to 'scout.toml' to use.
 
 # If you are using environment variables, do NOT use this.
 
