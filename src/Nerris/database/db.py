@@ -4,7 +4,7 @@ This is a more 'high level' of sorts DB interface.
 from functools import wraps
 from typing import Optional, cast
 
-from sqlalchemy import create_engine, Engine, select, or_, inspect
+from sqlalchemy import create_engine, select, or_, inspect
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 

@@ -11,6 +11,7 @@ class NotFound(DBError, ValueError):
     """
     pass
 
+
 class UserNotFound(NotFound):
     """
     This is raised when a user can not be found
