@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import Nerris.exceptions
-from Nerris.database import models
+from Nerris.database import db, models
 from Nerris.ns_api import ns
 from Nerris.core.nationstates import __VERSION__
 from Nerris.ns_api.nation import Nation
@@ -40,17 +40,14 @@ class NSVerify(commands.Cog):
                                                      user_agent=user_agent).build()
 
     def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
-                   guild: discord.Guild, override: Optional[bool] = False) -> str:
+                   guild: discord.Guild, overwrite: Optional[bool] = False) -> str:
         if verified_role is None and resident_role is None:
             raise Nerris.exceptions.NoRoles()
 
-        guild = self.nerris.database.get_guild(guild.id)
-
-        if verified_role is not None:
-            self.nerris.add_role(verified_role, guild, VERIFIED.casefold(), override=override)
-
-        if resident_role is not None:
-            self.nerris.add_role(resident_role, guild, RESIDENT.casefold(), override=override)
+        with Session(self.nerris.engine) as session:
+            guild = db.get_guild(guild.id, session=session)
+            if resident_role is not None:
+                self.nerris.add_role(resident_role, guild, RESIDENT.casefold(), override=overwrite, session=session)
 
         if verified_role is not None and resident_role is not None:
             return ("A Natural 20, a critical success! I've obtained the mythical +1 roles of {} and {}!"
@@ -67,31 +64,31 @@ class NSVerify(commands.Cog):
     async def link_region(self, ctx, region_name: str, verified_role: Optional[discord.Role],
                           resident_role: Optional[discord.Role]):
         region = await self.ns_client.get_region(region_name)
-        with Session(self.nerris.database.engine) as session:
+        with Session(self.nerris.engine) as session:
             new_region = self.nerris.database.register_region(region.name, session=session)
             new_guild = self.nerris.database.register_guild(snowflake=ctx.guild.id, session=session)
             self.nerris.database.link_guild_region(new_guild, new_region)
             session.commit()  # flush?
 
             try:
-                self.link_roles(verified_role, resident_role, ctx.message, override=False)
+                self.link_roles(verified_role, resident_role, ctx.message, overwrite=False)
                 await ctx.send("The region has been registered to this server along with the roles!")
 
                 users = session.scalars(select(models.User.snowflake)).all()
                 if users:
                     members = await ctx.guild.query_members(user_ids=users)
                     for member in members:
-                        await self.give_verified_roles_one_guild(member, ctx.guild, session)
+                        await self.give_verified_roles(member, ctx.guild, session=session)
 
             except Nerris.exceptions.NoRoles:
                 await ctx.send("I've added that world to my maps!")
-            except Nerris.exceptions.InvalidGuild as Guild:
+            except Nerris.exceptions.InvalidGuild:
                 await ctx.send("Looks like you don't have a region associated with this server!")
-            except Nerris.exceptions.InvalidRole as Role:
+            except Nerris.exceptions.InvalidRole:
                 await ctx.send("Oh no, I rolled a Nat 1! I can't currently add that role!")
-            except Nerris.exceptions.InvalidMeaning as Meaning:
+            except Nerris.exceptions.InvalidMeaning:
                 await ctx.send("Oh no, I've lost my notes! I can't currently add roles!")
-            except Nerris.exceptions.RoleOverwrite as Role:
+            except Nerris.exceptions.RoleOverwrite:
                 await ctx.send(
                     "Unfortunately that would overwrite a role. Use `\\link_roles` with overwrite_roles set to True")
 
@@ -138,12 +135,12 @@ class NSVerify(commands.Cog):
             return
 
         if code is None:
-            await self.verify_dm_flow(ctx, nation)
+            await self.verify_dm_flow(ctx, nation.name)
         else:
-            message = None
             try:
+                message = None
                 async with ctx.typing(ephemeral=True):
-                    res, ns_nation = await self._verify_nation(nation, code)
+                    res, ns_nation = await self._verify_nation(nation.name, code)
                     if res:
                         message = await ctx.send(
                             "Thanks for the character sheet! I'll go ahead and put you in my campaign binder...",
@@ -154,11 +151,12 @@ class NSVerify(commands.Cog):
                              ).format(code, ns_nation.name),
                             ephemeral=True)
 
-                res = await self.register_nation(ns_nation, ctx.message)
-                await message.edit(content="There we go! I'll give you roles now...")
+                with Session(self.nerris.engine) as session:
+                    await self.register_nation(ns_nation, ctx.message, session=session)
+                    await message.edit(content="There we go! I'll give you roles now...")
 
-                await self.give_verified_roles(ctx.message.author)
-                await message.edit(content="Done! I've given you all roles you can have!")
+                    await self.give_verified_roles(ctx.message.author, session=session)
+                    await message.edit(content="Done! I've given you all roles you can have!")
             except Nerris.exceptions.InvalidCode_NSVerify:
                 await ctx.send("Oh no, you didn't role high enough it seems. `{}` isn't the right code!".format(code),
                                ephemeral=True)
@@ -191,18 +189,18 @@ class NSVerify(commands.Cog):
             await _message.edit(
                 content="Hmm...{} isn't right. Maybe cast scry and you'll find the right one...".format(Code.args[0]))
         except (Nerris.exceptions.NoGuilds, Nerris.exceptions.NoRoles):
-            await _message.edit(content="I can't give you any roles right now. Thanks for the charactersheet though!")
+            await _message.edit(content="I can't give you any roles right now. Thanks for the character-sheet though!")
         except Nerris.exceptions.NoMeanings:
             await _message.edit(content="Oh...I don't think I have a roles I can give for that...")
 
     @commands.hybrid_command()  # type: ignore
     @commands.guild_only()
     async def unverify_nation(self, ctx, nation_name: str):
-        with Session(self.nerris.database.engine) as session:
+        with Session(self.nerris.engine) as session:
             user = self.nerris.database.get_user(ctx.author.id, session=session)
 
             ns_nation = await self.nerris.ns_client.get_nation(nation_name)
-            nation = self.nerris.database.get_nation(ns_nation.name, session=session)
+            nation = db.get_nation(ns_nation.name, session=session)
 
             if nation is None or user is None or nation not in user.nations:
                 return
@@ -211,7 +209,7 @@ class NSVerify(commands.Cog):
                 user.nations.remove(nation)
             except (ValueError, KeyError):
                 pass
-            await self.give_verified_roles(ctx.author)
+            await self.give_verified_roles(ctx.author, session=session)
 
             if not nation.users:
                 session.delete(nation)
@@ -228,26 +226,26 @@ class NSVerify(commands.Cog):
     async def link_roles(self, ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                          overwrite_roles: Optional[bool] = False):
         try:
-            await ctx.send(self.link_roles(verified_role, resident_role, ctx.message, override=overwrite_roles))
+            await ctx.send(self.link_roles(verified_role, resident_role, ctx.message, overwrite=overwrite_roles))
 
-            with Session(self.nerris.database.engine) as session:
+            with Session(self.nerris.engine) as session:
                 users = session.scalars(select(models.User.snowflake)).all()
                 if users:
                     members = await ctx.guild.query_members(user_ids=users)
                     for member in members:
-                        await self.give_verified_roles_one_guild(member, ctx.guild, session)
+                        await self.give_verified_roles(member, ctx.guild, session=session)
 
         except Nerris.exceptions.NoRoles:
             await ctx.send("I don't know why you're trying to add roles without giving me any...")
-        except Nerris.exceptions.InvalidGuild as Guild:
+        except Nerris.exceptions.InvalidGuild:
             await ctx.send("Looks like you don't have a region associated with this server!")
-        except Nerris.exceptions.InvalidRole as Role:
+        except Nerris.exceptions.InvalidRole:
             await ctx.send("Oh no, I rolled a Nat 1! I can't currently add that role!")
-        except Nerris.exceptions.InvalidMeaning as Meaning:
+        except Nerris.exceptions.InvalidMeaning:
             await ctx.send("Oh no, I've lost my notes! I can't currently add roles!")
-        except Nerris.exceptions.RoleOverwrite as Role:
+        except Nerris.exceptions.RoleOverwrite:
             await ctx.send(
-                "Unfortuantely that would overwrite a role. Use `\\link_roles` with overrwrite_roles set to True")
+                "Unfortunately that would overwrite a role. Use `\\link_roles` with overwrite_roles set to True")
 
     @commands.hybrid_command()  # type: ignore
     @commands.is_owner()
@@ -269,14 +267,15 @@ class NSVerify(commands.Cog):
         else:
             await ctx.send("You didn't give me any valid roles to remove from notes!...")
 
-    async def register_nation(self, nation: Nation, message: discord.Message) -> str:
-        region = self.nerris.database.get_region(nation.region)
+    @staticmethod
+    async def register_nation(nation: Nation, message: discord.Message, *, session: Session) -> str:
+        region = db.get_region(nation.region, session=session)
         if region is None:
-            region = self.nerris.database.register_region(name=nation.region)
+            region = db.register_region(nation.region, session=session)
 
-        user = self.nerris.database.register_user(snowflake=message.author.id)
-        nation = self.nerris.database.register_nation(nation.name, region=region)
-        self.nerris.database.link_user_nation(user, nation)
+        user = db.register_user(message.author.id, session=session)
+        nation = db.register_nation(nation.name, region_info=region, session=session)
+        db.link_user_nation(user, nation, session=session)
         return "There we go! I'll see if I can get you some roles..."
 
     async def eligible_nsv_role(self, user: discord.Member, guild: models.Guild, session: Session) -> str | None:
@@ -303,60 +302,59 @@ class NSVerify(commands.Cog):
         else:
             return [RESIDENT, VERIFIED]
 
+    async def give_verified_roles(self, user: discord.User | discord.Member, guild: Optional[discord.Guild] = None,
+                                  *, session: Session):
+        if not session.scalars(select(models.Role)).all():
+            raise Nerris.exceptions.NoRoles()
 
-    async def give_verified_roles(self, user: discord.User | discord.Member, guild: Optional[discord.Guild] = None):
-        with Session(self.nerris.database.engine) as session:
-            if not session.scalars(select(models.Role)).all():
-                raise Nerris.exceptions.NoRoles()
+        user_db = self.nerris.database.get_user(user.id, session=session)
+        if user_db is None or not user_db.nations:
+            return
 
-            user_db = self.nerris.database.get_user(user.id, session=session)
-            if user_db is None or not user_db.nations:
+        mutual_guilds = {}
+        active_guilds = []
+        if guild is None:
+            mutual_guilds = {g.id: (g, m) for g in self.nerris.guilds if (m := await g.fetch_member(user.id))}
+            active_guilds = session.scalars(
+                select(models.Guild).where(models.Guild.snowflake.in_(mutual_guilds.keys()))).all()
+            if not active_guilds:
+                raise Nerris.exceptions.NoGuilds()
+
+        else:
+            mutual_guilds[guild.id] = user
+            active_guilds = [self.nerris.database.get_guild(guild.id, session=session)]
+            active_guilds = [g for g in active_guilds if g is not None]
+            if not active_guilds:
                 return
 
-            mutual_guilds = {}
-            active_guilds = []
-            if guild is None:
-                mutual_guilds = {g.id: (g, m) for g in self.nerris.guilds if (m := await g.fetch_member(user.id))}
-                active_guilds = session.scalars(
-                    select(models.Guild).where(models.Guild.snowflake.in_(mutual_guilds.keys()))).all()
-                if not active_guilds:
-                    raise Nerris.exceptions.NoGuilds()
+        for active_guild in active_guilds:
+            if mutual_guilds[active_guild.snowflake][1] is None or not active_guild.roles:
+                continue
 
-            else:
-                mutual_guilds[guild.id] = user
-                active_guilds = [self.nerris.database.get_guild(guild.id, session=session)]
-                active_guilds = [g for g in active_guilds if g is not None]
-                if not active_guilds:
-                    return
+            user = mutual_guilds[active_guild.snowflake][1]
 
-            for active_guild in active_guilds:
-                if mutual_guilds[active_guild.snowflake][1] is None or not active_guild.roles:
-                    continue
+            eligible_roles = await self.eligible_nsv_role(user, active_guild, session=session)
+            ineligible_roles = await self.ineligible_nsv_roles(eligible_roles)
+            eligible_discord = discord.Object(self.nerris.database.get_guildrole_with_meaning(active_guild,
+                                                                                              eligible_roles,
+                                                                                              session=session))
 
-                user = mutual_guilds[active_guild.snowflake][1]
+            ineligible_db = [self.nerris.database.get_guildrole_with_meaning(active_guild, r, session=session)
+                             for r in ineligible_roles]
+            discord_roles = [discord.Object(r.snowflake) for r in ineligible_db if r is not None]
 
-                eligible_roles = await self.eligible_nsv_role(user, active_guild, session=session)
-                ineligible_roles = await self.ineligible_nsv_roles(eligible_roles)
-                eligible_discord = discord.Object(self.nerris.database.get_guildrole_with_meaning(active_guild,
-                                                                                                  eligible_roles,
-                                                                                                  session=session))
+            await user.add_roles(eligible_discord)
+            await user.remove_roles(*discord_roles)
 
-                ineligible_db = [self.nerris.database.get_guildrole_with_meaning(active_guild, r, session=session)
-                                 for r in ineligible_roles]
-                discord_roles = [discord.Object(r.snowflake) for r in ineligible_db if r is not None]
-
-                await user.add_roles(eligible_discord)
-                await user.remove_roles(*discord_roles)
-
-    async def _verify_nation(self, nation_name: str, code: Optional[str]) -> tuple[str, Nation]:
+    async def _verify_nation(self, nation: Nation | str, code: Optional[str]) -> tuple[str, Nation]:
         if code is None:
             raise Nerris.exceptions.NoCode_NSVerify()
 
-        response, nation = await self.ns_client.verify(nation_name, code)
+        response, nation = await self.ns_client.verify(nation, code)
         if not response:
             raise Nerris.exceptions.InvalidCode_NSVerify(code)
 
-        return "You're verified! Let me put this charactersheet in my campaign binder.", nation
+        return "You're verified! Let me put this character-sheet in my campaign binder.", nation
 
     @commands.hybrid_command()  # type: ignore
     async def verified_nations(self, ctx, private_response: Optional[bool] = True):
@@ -370,7 +368,8 @@ class NSVerify(commands.Cog):
 
     @commands.Cog.listener('on_member_join')
     async def verify_on_join(self, member: discord.Member):
-        await self.give_verified_roles(member, member.guild)
+        with Session(self.nerris.engine) as session:
+            await self.give_verified_roles(member, member.guild, session=session)
 
 
 async def setup(bot):
