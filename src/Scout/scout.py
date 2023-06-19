@@ -4,17 +4,20 @@ The main module for Scout.
 This contains all the main 'logic' for the Discord Bot part of things.
 """
 
-from typing import Optional, Any
+from typing import Optional, Any, cast
 
 import aiohttp
 import discord
+from discord.app_commands import Translator
 from discord.ext import commands
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 import Scout
 from Scout import config
 from Scout.database import db
 from Scout.database.base import Base
+from Scout.localization import ScoutTranslator
 from Scout.exceptions import *
 
 intents = discord.Intents.default()
@@ -29,8 +32,9 @@ class ScoutBot(commands.Bot):
     The main Discord Bot Class
     """
     config: dict[str, Any]
-    engine: db.Engine
+    engine: Engine
     reusable_session: aiohttp.ClientSession
+    translator = ScoutTranslator()
     meanings = {}
 
     async def on_ready(self):
@@ -43,6 +47,7 @@ class ScoutBot(commands.Bot):
         print("We are logged in as {}".format(self.user))
         Base.metadata.create_all(self.engine)
         await self.load_extension("Scout.core.nationstates.nsverify")
+        await self.tree.set_translator(self.translator)
         await self.tree.sync()
 
     def register_meaning(self, meaning: str, *, suppress_error=False, session: Optional[Session] = None):
@@ -93,28 +98,19 @@ async def remove_guild_info(guild: discord.Guild):
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def source(ctx):
-    await ctx.send("You can find my source code here! {}".format(Scout.SOURCE))
+    await ctx.send(scout.translator.translate_response("get-source", source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 async def info(ctx):
-    info_string = (
-        "Hi, I'm Scout!\n"
-        "I am currently Scout Version {}.\n"
-        "I am a bot created for The Campfire discord server and the associated NS region Sun's Reach!\n"
-        "I mostly just help manage nation verification at this time.\n"
-        "I am Open-Source with my source code available on Github.\n"
-        "If you wish to read my source code, please go to: {}\n"
-        "Now where did my D20 go..."
-    ).format(Scout.__VERSION__, Scout.SOURCE)
-    await ctx.send(info_string)
+    await ctx.send(scout.translator.translate_response("bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def sync(ctx):
     await scout.tree.sync(guild=ctx.guild)
-    await ctx.send("Synced Slash Commands to Server!")
+    await ctx.send(scout.translator.translate_response("command-sync"))
 
 
 scout.run(scout.config["DISCORD_API_KEY"])

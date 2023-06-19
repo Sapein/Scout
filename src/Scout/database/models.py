@@ -1,7 +1,8 @@
 """
 """
 import sqlalchemy.sql.functions
-from sqlalchemy import Table, Column, ForeignKey, Identity, Text, DateTime
+from datetime import datetime
+from sqlalchemy import Table, Column, ForeignKey, Identity, Text
 from sqlalchemy.orm import Mapped, relationship, mapped_column
 
 from Scout.database.base import Base
@@ -77,7 +78,7 @@ class Nation(Base):
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     name: Mapped[str] = mapped_column(index=True, unique=True)
     private: Mapped[bool] = mapped_column(default=False)
-    added_on: Mapped[DateTime] = mapped_column(server_default=sqlalchemy.sql.functions.now())
+    added_on: Mapped[datetime] = mapped_column(server_default=sqlalchemy.sql.functions.now())
 
     region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"))
 

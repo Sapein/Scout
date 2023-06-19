@@ -21,3 +21,4 @@ result==0.9.0
 SQLAlchemy==2.0.10
 typing_extensions==4.5.0
 yarl==1.9.1
+fluent.runtime==0.4.0

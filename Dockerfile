@@ -7,6 +7,9 @@ RUN pip install -r /tmp/requirements.txt
 
 COPY . /scout
 
+
 RUN pip install /scout
+
+WORKDIR /scout
 
 CMD ["python3", "-m", "Scout.scout"]
