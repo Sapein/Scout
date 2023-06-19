@@ -65,9 +65,9 @@ class NSVerify(commands.Cog):
                           resident_role: Optional[discord.Role]):
         region = await self.ns_client.get_region(region_name)
         with Session(self.scout.engine) as session:
-            new_region = self.scout.database.register_region(region.name, session=session)
-            new_guild = self.scout.database.register_guild(snowflake=ctx.guild.id, session=session)
-            self.scout.database.link_guild_region(new_guild, new_region)
+            new_region = db.register_region(region.name, session=session)
+            new_guild = db.register_guild(guild_snowflake=ctx.guild.id, session=session)
+            db.link_guild_region(new_guild, new_region, session=session)
             session.commit()  # flush?
 
             try:
@@ -96,16 +96,17 @@ class NSVerify(commands.Cog):
     @commands.is_owner()
     @commands.guild_only()
     async def unlink_region(self, ctx, region_name: str):
-        ns_region = await self.ns_client.get_region(region_name.replace(" ", "_"))
-        region = self.scout.database.get_region(ns_region.name)
-        guild = self.scout.database.get_guild(ctx.guild.id)
+        with Session(self.scout.engine) as session:
+            ns_region = await self.ns_client.get_region(region_name.replace(" ", "_"))
+            region = db.get_region(ns_region.name, session=session)
+            guild = db.get_guild(ctx.guild.id, session=session)
 
-        if region is not None and guild is not None:
-            if region in guild.regions:
-                self.scout.database.unlink_guild_region(guild, region)
-                return await ctx.send("I've removed this region from my maps!")
-            return await ctx.send("I couldn't find that region...")
-        await ctx.send("I couldn't find that region or guild...")
+            if region is not None and guild is not None:
+                if region in guild.regions:
+                    db.unlink_guild_region(guild, region, session=session)
+                    return await ctx.send("I've removed this region from my maps!")
+                return await ctx.send("I couldn't find that region...")
+            await ctx.send("I couldn't find that region or guild...")
 
     async def verify_dm_flow(self, ctx, nation: str):
         await ctx.send("Alrighty! Please check your DMs", ephemeral=True)
@@ -130,9 +131,10 @@ class NSVerify(commands.Cog):
         Verifies a nation and assigns it to a user.
         """
         nation = await self.ns_client.get_nation(nation.replace(" ", "_"))
-        if self.scout.database.get_nation(nation.name):
-            await ctx.send("That nation has a character sheet already, silly!", ephemeral=True)
-            return
+        with Session(self.scout.engine) as session:
+            if db.get_nation(nation.name, session=session):
+                await ctx.send("That nation has a character sheet already, silly!", ephemeral=True)
+                return
 
         if code is None:
             await self.verify_dm_flow(ctx, nation.name)
@@ -197,7 +199,7 @@ class NSVerify(commands.Cog):
     @commands.guild_only()
     async def unverify_nation(self, ctx, nation_name: str):
         with Session(self.scout.engine) as session:
-            user = self.scout.database.get_user(ctx.author.id, session=session)
+            user = db.get_user(ctx.author.id, session=session)
 
             ns_nation = await self.scout.ns_client.get_nation(nation_name)
             nation = db.get_nation(ns_nation.name, session=session)
@@ -280,7 +282,7 @@ class NSVerify(commands.Cog):
 
     async def eligible_nsv_role(self, user: discord.Member, guild: models.Guild, session: Session) -> str | None:
         eligible_role = None
-        user_db = self.scout.database.get_user(user.id, session=session)
+        user_db = db.get_user(user.id, session=session)
 
         if guild is None or user_db is None:
             return None
@@ -307,7 +309,7 @@ class NSVerify(commands.Cog):
         if not session.scalars(select(models.Role)).all():
             raise Scout.exceptions.NoRoles()
 
-        user_db = self.scout.database.get_user(user.id, session=session)
+        user_db = db.get_user(user.id, session=session)
         if user_db is None or not user_db.nations:
             return
 
@@ -322,7 +324,7 @@ class NSVerify(commands.Cog):
 
         else:
             mutual_guilds[guild.id] = user
-            active_guilds = [self.scout.database.get_guild(guild.id, session=session)]
+            active_guilds = [db.get_guild(guild.id, session=session)]
             active_guilds = [g for g in active_guilds if g is not None]
             if not active_guilds:
                 return
@@ -335,11 +337,11 @@ class NSVerify(commands.Cog):
 
             eligible_roles = await self.eligible_nsv_role(user, active_guild, session=session)
             ineligible_roles = await self.ineligible_nsv_roles(eligible_roles)
-            eligible_discord = discord.Object(self.scout.database.get_guildrole_with_meaning(active_guild,
-                                                                                              eligible_roles,
-                                                                                              session=session))
+            eligible_discord = discord.Object(db.get_guildrole_with_meaning(active_guild,
+                                                                            eligible_roles,
+                                                                            session=session).snowflake)
 
-            ineligible_db = [self.scout.database.get_guildrole_with_meaning(active_guild, r, session=session)
+            ineligible_db = [db.get_guildrole_with_meaning(active_guild, r, session=session)
                              for r in ineligible_roles]
             discord_roles = [discord.Object(r.snowflake) for r in ineligible_db if r is not None]
 
@@ -361,7 +363,8 @@ class NSVerify(commands.Cog):
         """
         Displays Verified Nations of a given user.
         """
-        user = self.scout.database.get_user(ctx.message.author.id, snowflake_only=True)
+        with Session(self.scout.engine) as session:
+            user = db.get_user(ctx.message.author.id, snowflake_only=True, session=session)
         if user is not None and user.nations:
             await ctx.send('\n'.join([n.name for n in user.nations]), ephemeral=private_response)
         await ctx.send("I don't have any nations for you!")
