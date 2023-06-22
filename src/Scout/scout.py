@@ -34,8 +34,8 @@ class ScoutBot(commands.Bot):
     config: dict[str, Any]
     engine: Engine
     reusable_session: aiohttp.ClientSession
-    translator: ScoutTranslator = ScoutTranslator()
     meanings = {}
+    translator: ScoutTranslator = ScoutTranslator()
 
     async def on_ready(self):
         self.reusable_session = aiohttp.ClientSession()
@@ -76,7 +76,7 @@ scout.config = _config
 
 @scout.listen('on_guild_role_update')
 async def update_stored_roles(before: discord.Role, after: discord.Role):
-    with Session(scout.database.engine) as session:
+    with Session(scout.engine) as session:
         role_db = db.get_role(before.id, snowflake_only=True, session=session)
         if before.id != after.id and role_db:
             role_db.snowflake = after.id
@@ -85,32 +85,32 @@ async def update_stored_roles(before: discord.Role, after: discord.Role):
 
 @scout.listen('on_guild_role_delete')
 async def remove_stored_roles(role: discord.Role):
-    with Session(scout.database.engine) as session:
+    with Session(scout.engine) as session:
         db.remove_role(role.id, snowflake_only=True, session=session)
 
 
 @scout.listen('on_guild_remove')
 async def remove_guild_info(guild: discord.Guild):
-    with Session(scout.database.engine) as session:
+    with Session(scout.engine) as session:
         db.remove_guild(guild.id, snowflake_only=True, session=session)
 
 
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def source(ctx):
-    await ctx.send(scout.translator.translate_response("get-source", source=Scout.SOURCE))
+    await ctx.send(await scout.translator.translate_response("get-source", source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 async def info(ctx):
-    await ctx.send(scout.translator.translate_response("bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
+    await ctx.send(await scout.translator.translate_response("bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def sync(ctx):
     await scout.tree.sync(guild=ctx.guild)
-    await ctx.send(scout.translator.translate_response("command-sync"))
+    await ctx.send(await scout.translator.translate_response("command-sync"))
 
 
 scout.run(scout.config["DISCORD_API_KEY"])

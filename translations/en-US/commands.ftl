@@ -22,10 +22,10 @@ unverify_nation = unverify_nation
 verified_role = verified_role
 resident_role = resident_role
 
-overwrite_roles = overwrite roles
-region_name = region name
-nation_name = nation name
+overwrite_roles = overwrite_roles
+region_name = region_name
+nation_name = nation_name
 nation = nation
 code = code
-private_response = private response
-remove_roles = remove roles
+private_response = private_response
+remove_roles = remove_roles

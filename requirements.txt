@@ -16,7 +16,6 @@ multidict==6.0.4
 pycares==4.3.0
 pycparser==2.21
 python-dotenv==1.0.0
-result==0.9.0
 SQLAlchemy~=2.0.12
 typing_extensions==4.5.0
 yarl==1.9.1
