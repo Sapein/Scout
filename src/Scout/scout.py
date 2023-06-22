@@ -34,7 +34,7 @@ class ScoutBot(commands.Bot):
     config: dict[str, Any]
     engine: Engine
     reusable_session: aiohttp.ClientSession
-    translator = ScoutTranslator()
+    translator: ScoutTranslator = ScoutTranslator()
     meanings = {}
 
     async def on_ready(self):
