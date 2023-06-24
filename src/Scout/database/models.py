@@ -35,8 +35,14 @@ class User(Base):
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     snowflake: Mapped[int] = mapped_column(unique=True)
 
+    override_discord_locale: Mapped[bool] = mapped_column(default=False)
+    override_server_locale: Mapped[bool] = mapped_column(default=False)
+
     nations: Mapped[set["Nation"]] = relationship(secondary=user_nation, back_populates="users",
                                                   cascade="save-update, merge, delete")
+
+    locales: Mapped[set["UserLocale"]] = relationship(back_populates="user", cascade="save-update, merge, delete")
+
 
 
 class Guild(Base):
@@ -45,9 +51,14 @@ class Guild(Base):
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     snowflake: Mapped[int] = mapped_column(unique=True, index=True)
 
+    override_discord_locale: Mapped[bool] = mapped_column(default=False)
+    override_user_locales: Mapped[bool] = mapped_column(default=False)
+
     regions: Mapped[set["Region"]] = relationship(secondary=guild_region, back_populates="guilds")
     roles: Mapped[set["Role"]] = relationship(back_populates="guild",
                                               cascade="save-update, merge, delete, delete-orphan")
+
+    locales: Mapped[set["GuildLocale"]] = relationship(back_populates="guild", cascade="save-update, merge, delete")
 
 
 class Role(Base):
@@ -95,6 +106,26 @@ class Region(Base):
     nations: Mapped[set["Nation"]] = relationship(back_populates="region",
                                                   cascade="save-update, merge, delete, delete-orphan")
     guilds: Mapped[set["Guild"]] = relationship(secondary=guild_region, back_populates="regions")
+
+
+class UserLocale(Base):
+    __tablename__ = "user_locales"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    locale: Mapped[str] = mapped_column(primary_key=True)
+    priority: Mapped[int] = mapped_column(primary_key=True)
+
+    user: Mapped["User"] = relationship(back_populates="locales")
+
+
+class GuildLocale(Base):
+    __tablename__ = "guild_locale"
+
+    guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"), primary_key=True)
+    locale: Mapped[str] = mapped_column(primary_key=True)
+    priority: Mapped[int] = mapped_column(primary_key=True)
+
+    guild: Mapped["Guild"] = relationship(back_populates="locales")
 
 # class RegionalMessageBoard(Base):
 #     __tablename__ = "rmb"
