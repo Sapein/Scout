@@ -4,11 +4,10 @@ The main module for Scout.
 This contains all the main 'logic' for the Discord Bot part of things.
 """
 
-from typing import Optional, Any, cast
+from typing import Optional, Any
 
 import aiohttp
 import discord
-from discord.app_commands import Translator
 from discord.ext import commands
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
@@ -17,8 +16,8 @@ import Scout
 from Scout import config
 from Scout.database import db
 from Scout.database.base import Base
-from Scout.localization import ScoutTranslator
 from Scout.exceptions import *
+from Scout.localization import ScoutTranslator
 
 intents = discord.Intents.default()
 
@@ -35,7 +34,7 @@ class ScoutBot(commands.Bot):
     engine: Engine
     reusable_session: aiohttp.ClientSession
     meanings = {}
-    translator: ScoutTranslator = ScoutTranslator()
+    translator: ScoutTranslator
 
     async def on_ready(self):
         self.reusable_session = aiohttp.ClientSession()
@@ -46,7 +45,9 @@ class ScoutBot(commands.Bot):
                                     connect=self.config.get("DB_CONN", {'host': None, 'port': None}))
         print("We are logged in as {}".format(self.user))
         Base.metadata.create_all(self.engine)
+        self.translator = ScoutTranslator("scout")
         await self.load_extension("Scout.core.nationstates.nsverify")
+        await self.load_extension("Scout.core.translations.translations")
         await self.tree.set_translator(self.translator)
         await self.tree.sync()
 
@@ -103,7 +104,8 @@ async def source(ctx):
 
 @scout.hybrid_command()  # type: ignore
 async def info(ctx):
-    await ctx.send(await scout.translator.translate_response("bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
+    await ctx.send(
+        await scout.translator.translate_response("bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
@@ -111,6 +113,13 @@ async def info(ctx):
 async def sync(ctx):
     await scout.tree.sync(guild=ctx.guild)
     await ctx.send(await scout.translator.translate_response("command-sync"))
+
+
+@scout.hybrid_command()  # type: ignore
+@commands.is_owner()
+async def personality_set(ctx, personality: str):
+    scout.translator.set_personality(personality)
+    await ctx.send(await scout.translator.translate_response("personality-set"))
 
 
 scout.run(scout.config["DISCORD_API_KEY"])

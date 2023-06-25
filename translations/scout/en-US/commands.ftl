@@ -9,6 +9,17 @@ source = source
 # The name of the info command
 info = info
 
+set_personality = set_personality
+
+# Translation Commands
+set_server_language = set_server_language
+set_language = set_language
+language = language
+fallback_language = fallback_language
+override_locale = override_locale
+use_in_servers = use_in_servers
+restrict_user_locales = restrict_user_locales
+
 ## NSVerify Commands
 link_roles = link_roles
 unlink_roles = unlink_roles

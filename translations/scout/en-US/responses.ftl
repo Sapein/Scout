@@ -14,6 +14,11 @@ bot-info = Hi, I'm Scout!
 
 command-sync = Synced Slash Commands to Server!
 
+personality-set = "Personality has been set to the requested personality!"
+
+## Translation Commands
+set_server_language = set_server_language
+set_language = set_language
 
 ## NSVerify link-roles command
 

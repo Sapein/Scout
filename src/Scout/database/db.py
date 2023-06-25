@@ -42,15 +42,6 @@ def register_user(user_snowflake: int, *, session: Session) -> models.User:
     return new_user
 
 
-def remove_user(user: int | models.User, *, session: Session):
-    if isinstance(user, int):
-        userdb = session.scalar(select(models.User).where(models.User.id == user))
-        if userdb is None:
-            raise Scout.database.exceptions.UserNotFound("User with user ID {} not found!".format(user))
-        user = userdb
-    session.delete(user)
-
-
 def register_nation(nation: str, *, region_info: models.Region | int | str,
                     is_private: Optional[bool] = False, session: Session):
     if isinstance(region_info, str):
@@ -142,7 +133,7 @@ def unlink_guild_region(guild: models.Guild, region: models.Region, *, session: 
 
 
 def register_role(snowflake: str, *, guild: int | models.Guild, session: Session) -> models.Role:
-    new_role: models.Role = None
+    new_role: models.Role | None = None
     if isinstance(guild, int):
         new_role = models.Role(snowflake=snowflake, guild_id=guild)
     elif isinstance(guild, models.Guild):
@@ -244,3 +235,67 @@ def get_guildrole_with_meaning(guild: int | models.Guild, meaning: int | str | m
              .distinct())
 
     return session.scalar(query)
+
+
+def add_user_locale(user: int | models.User, locale: str, priority: int,
+                    *, snowflake_only=True, session: Session) -> models.UserLocale:
+    if not isinstance(user, models.User):
+        user = get_user(user, snowflake_only=snowflake_only, session=session)
+
+    return models.UserLocale(user=user, locale=locale, priority=priority)
+
+
+def get_user_locale_with_priority(user: int | models.User, priority: int,
+                                  *, snowflake_only=True, session: Session) -> models.UserLocale:
+    if not isinstance(user, models.User):
+        user = get_user(user, snowflake_only=snowflake_only, session=session)
+
+    return session.scalar(select(models.UserLocale)
+                          .where(models.UserLocale.user_id == user.id)
+                          .where(models.UserLocale.priority == priority)
+                          .distinct()
+                          .all())
+
+
+def get_user_locale_with_language(user: int | models.User, locale: str,
+                                  *, snowflake_only=True, session: Session) -> models.UserLocale:
+    if not isinstance(user, models.User):
+        user = get_user(user, snowflake_only=snowflake_only, session=session)
+
+    return session.scalar(select(models.UserLocale)
+                          .where(models.UserLocale.user_id == user.id)
+                          .where(models.UserLocale.locale == locale)
+                          .distinct()
+                          .all())
+
+
+def add_server_locale(user: int | models.Guild, locale: str, priority: int,
+                      *, snowflake_only=True, session: Session) -> models.GuildLocale:
+    if not isinstance(user, models.Guild):
+        user = get_user(user, snowflake_only=snowflake_only, session=session)
+
+    return models.GuildLocale(user=user, locale=locale, priority=priority)
+
+
+def get_server_locale_with_priority(guild: int | models.Guild, priority: int,
+                                    *, snowflake_only=True, session: Session) -> models.GuildLocale:
+    if not isinstance(guild, models.Guild):
+        guild = get_guild(guild, snowflake_only=snowflake_only, session=session)
+
+    return session.scalar(select(models.GuildLocale)
+                          .where(models.GuildLocale.guild_id == guild.id)
+                          .where(models.GuildLocale.priority == priority)
+                          .distinct()
+                          .all())
+
+
+def get_server_locale_with_language(guild: int | models.Guild, locale: str,
+                                    *, snowflake_only=True, session: Session) -> models.GuildLocale:
+    if not isinstance(guild, models.Guild):
+        guild = get_guild(guild, snowflake_only=snowflake_only, session=session)
+
+    return session.scalar(select(models.GuildLocale)
+                          .where(models.GuildLocale.guild_id == guild.id)
+                          .where(models.GuildLocale.locale == locale)
+                          .distinct()
+                          .all())
