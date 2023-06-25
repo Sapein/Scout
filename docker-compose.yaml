@@ -1,8 +1,10 @@
+#file: noinspection ComposeUnknownKeys
 version: "3.9"
 services:
   scout:
     build:
       context: ./
+      # noinspection ComposeUnknownKeys,ComposeUnknownKeys
       dockerfile_inline: |
           FROM docker.io/library/python:3.11.3-alpine
           COPY requirements_compose.txt /tmp

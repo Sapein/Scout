@@ -94,8 +94,8 @@ def pythonize_env(env_config):
             return value
         raise ValueError("You MUST pass a value for {}".format(name))
 
-    def str_to_bool(val: str) -> bool:
-        match val.casefold():
+    def str_to_bool(_val: str) -> bool:
+        match _val.casefold():
             case "true":
                 return True
             case _:

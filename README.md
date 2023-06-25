@@ -24,7 +24,7 @@ For a more 'robust' setup please see the documentation.
 
 ## Development Setup
 To simplify this you can just do `pip install -e .[dev]` and it will install the development dependencies, without
-strict pinning. If you wish you can use the frozen requirements.txt to ensure compatibability if you run into issues.
+strict pinning. If you wish you can use the frozen requirements.txt to ensure compatibility if you run into issues.
 
 # License and Copyright
 All authors retain their copyright in this work unless otherwise specified.
@@ -35,13 +35,13 @@ all non-code work is licensed under the CC-BY-NC-SA 4.0 License as well.
 # QnA/FaQ
 ### What's with the name "Scout"?
 The name Scout is the name for the bot, based off of the fact that this bot was initially constructed for The Campfire,
-a Camp-themed Discord Server. The initial branding used the name "Nerris", which is a character from the show Camp Camp,
+a Camp-themed Discord Server. The initial branding used the name "Nerris", which is a character from the show CampCamp,
 which is produced by Rooster Teeth. I personally like the character, but using a character that I do not own the rights
 too is probably not the best idea.
 
 ### What happened to Nerris?
 Since I don't own the branding/rights to Nerris, the bot was rebranded to Scout -- paying homage to the origin and also
-being somewhat unique for Discord Bots.
+being unique for Discord Bots.
 
 ### Why not use Poetry?  
 Because it doesn't follow the standards as set forth by the various PEPs around packaging. When it does, I'll consider it.
@@ -65,7 +65,7 @@ bugs and other issues that could arise. As such I would recommend using those bo
 the code.
 
 ### Why do you not have feature X/Y/Z?  
-Because the bot is currently under heavy development. Also the initial version is more of a 'Minimum Viable Product' in a sense.
+Because the bot is currently under heavy development. Also, the initial version is more of a 'Minimum Viable Product' in a sense.
 It's a relatively basic implementation of what is needed specifically for 'The Campfire' and nothing more. I do intend on adding
 more features over-time, however we have to start somewhere.
 
@@ -74,9 +74,9 @@ that is unless you also wish to submit a PR for that feature.
 
 ### Why is this project open sourced?  
 Because all the other relevant bots are private and closed-source (at least, to my knowledge). I do not want to forever be
-tasked with the maintanance of this bot -- or seeking out a maintainer when I decide I want to retire from development. I also
+tasked with the maintenance of this bot -- or seeking out a maintainer when I decide I want to retire from development. I also
 believe that is to the benefit of all players, of all regions, in NationStates to open source technology that a region relies on,
-not just for transparancy but also for data ownership. So this project was always going to be open source.
+not just for transparency but also for data ownership. So this project was always going to be open source.
 
 ### Why did is this licensed under the AGPL v3?  
 Because it was either this, the GPL v3, or the MIT License. I decided to go with the AGPL v3 for a few reasons.
@@ -85,7 +85,7 @@ The first was pretty simple, once I make the source available there's no strict 
 licensed under the MIT License, but then wanted to switch the AGPL v3, then someone could just fork from the MIT license 
 and continue it. That would be reasonable, and certainly their right, but it would render a switch to that license effectively
 dead on arrival. In order to prevent that I would need to remove each and every online copy of the bot's source, which isn't
-feasable nor possible and I wouldn't want to do that. However going the other way is relatively easy, in terms of 'control'.
+feasible nor possible and I wouldn't want to do that. However, going the other way is relatively easy, in terms of 'control'.
 
 The next is also pretty simple, if all my competitors are closed sourced bots, what to stop them from using my code (assuming they
 are written in Python which, I'm not certain of) to improve their bot? While I don't (currently) have anything they would
@@ -94,9 +94,9 @@ them doing that would defeat my desire for more openness on NationStates on this
 GPL and the AGPL.
 
 As to why the AGPL vs the GPL, this is a Discord bot. It's entirely provided 'as a service' to Discord Users. As such, it is my
-understanding that the conditions of the GPL don't necesarily trigger or require 'sharing' of their code. This would effectively
+understanding that the conditions of the GPL don't necessarily trigger or require 'sharing' of their code. This would effectively
 allow them to close source the bot and make 'improvements' without contributing back to everyone. This would be effectively
-the same circumstances under the last reason -- but also means that I make their bot better and they do nothing for everyone else.
+the same circumstances under the last reason -- but also means that I make their bot better, and they do nothing for everyone else.
 In my opinion this is a problem as it robs users of the ability to make improvements to that bot and also robs everyone else using
 that bot from the benefits of your improvements. However, the AGPL does trigger under these circumstances and require sharing.
 As such it was the best option to achieve what my goals, while also being open. 
@@ -104,5 +104,5 @@ As such it was the best option to achieve what my goals, while also being open.
 This is not to say I will never change the license or dual license or what have you. It is just that, at this time, the
 purposes for me open sourcing and making this bot available means that the best tool to do that is the AGPL v3. I may very well
 decide to try to relicense this in the future, and if I do it will likely be to change it to something like the MIT License.
-If the AGPL v3 is truely intolerable to you, and you still want to use this bot, and I'm willing to work with you (since I am
+If the AGPL v3 is truly intolerable to you, and you still want to use this bot, and I'm willing to work with you (since I am
 the only copyright holder and author. This will obviously change in the future though).

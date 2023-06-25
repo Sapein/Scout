@@ -59,7 +59,7 @@ class NSVerify(commands.Cog):
                 ).format(resident_role)
 
     @commands.hybrid_command()  # type: ignore
-    @commands.is_owner()
+    @commands.check_any(commands.has_guild_permissions(administrator=True), commands.is_owner())
     @commands.guild_only()
     async def link_region(self, ctx, region_name: str, verified_role: Optional[discord.Role],
                           resident_role: Optional[discord.Role]):
@@ -93,7 +93,7 @@ class NSVerify(commands.Cog):
                     "Unfortunately that would overwrite a role. Use `\\link_roles` with overwrite_roles set to True")
 
     @commands.hybrid_command()  # type: ignore
-    @commands.is_owner()
+    @commands.check_any(commands.has_guild_permissions(administrator=True), commands.is_owner())
     @commands.guild_only()
     async def unlink_region(self, ctx, region_name: str):
         with Session(self.scout.engine) as session:
@@ -223,7 +223,7 @@ class NSVerify(commands.Cog):
         await ctx.send("I've removed your character sheet from my campaign notes.")
 
     @commands.hybrid_command()  # type: ignore
-    @commands.is_owner()
+    @commands.check_any(commands.has_guild_permissions(administrator=True), commands.is_owner())
     @commands.guild_only()
     async def link_roles(self, ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                          overwrite_roles: Optional[bool] = False):
@@ -250,7 +250,7 @@ class NSVerify(commands.Cog):
                 "Unfortunately that would overwrite a role. Use `\\link_roles` with overwrite_roles set to True")
 
     @commands.hybrid_command()  # type: ignore
-    @commands.is_owner()
+    @commands.check_any(commands.has_guild_permissions(administrator=True), commands.is_owner())
     @commands.guild_only()
     async def unlink_roles(self, ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                            remove_roles: Optional[bool] = True):
@@ -280,7 +280,8 @@ class NSVerify(commands.Cog):
         db.link_user_nation(user, nation, session=session)
         return "There we go! I'll see if I can get you some roles..."
 
-    async def eligible_nsv_role(self, user: discord.Member, guild: models.Guild, session: Session) -> str | None:
+    @staticmethod
+    async def eligible_nsv_role(user: discord.Member, guild: models.Guild, session: Session) -> str | None:
         eligible_role = None
         user_db = db.get_user(user.id, session=session)
 
