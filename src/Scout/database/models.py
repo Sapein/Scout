@@ -1,10 +1,11 @@
 """This is the database mappings for Scout to use."""
+from typing import Optional
 
 import sqlalchemy.sql.functions
 from datetime import datetime
 from sqlalchemy import Table, Column, ForeignKey, Identity, Text
 from sqlalchemy.orm import Mapped, relationship, mapped_column
-
+#
 from Scout.database.base import Base
 
 user_nation = Table(
@@ -57,10 +58,6 @@ class User(Base):
     locales: Mapped[set["UserLocale"]] = relationship(back_populates="user", cascade="save-update, merge, delete")
 
 
-# class UserSettings(Base):
-#     __tablename__ = "user_settings"
-#     pass
-
 class Guild(Base):
     """ A mapping representing the Guild Database Table
 
@@ -80,18 +77,13 @@ class Guild(Base):
     snowflake: Mapped[int] = mapped_column(unique=True, index=True)
 
     override_discord_locale: Mapped[bool] = mapped_column(default=False)
-    restrict_user_locales: Mapped[bool] = mapped_column(default=False)
+    override_user_locales: Mapped[bool] = mapped_column(default=False)
 
     regions: Mapped[set["Region"]] = relationship(secondary=guild_region, back_populates="guilds")
     roles: Mapped[set["Role"]] = relationship(back_populates="guild",
                                               cascade="save-update, merge, delete, delete-orphan")
 
     locales: Mapped[set["GuildLocale"]] = relationship(back_populates="guild", cascade="save-update, merge, delete")
-
-
-# class GuildSettings(Base):
-#     __tablename__ = "guild_settings"
-#     pass
 
 class Role(Base):
     """Represents the role table in the database
@@ -191,6 +183,9 @@ class UserNames(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     name: Mapped[str] = mapped_column(primary_key=True)
 
+    first_seen: Mapped[datetime] = mapped_column(primary_key=True, server_default=sqlalchemy.sql.functions.now())
+    last_seen: Mapped[Optional[datetime]] = mapped_column(default=None)
+
     user: Mapped["User"] = relationship(back_populates="names")
 
 
@@ -210,11 +205,6 @@ class UserLocale(Base):
     priority: Mapped[int] = mapped_column(primary_key=True)
 
     user: Mapped["User"] = relationship(back_populates="locales")
-
-
-# class GuildNames(Base):
-#     __tablename__ = "guild_names"
-#     pass
 
 class GuildLocale(Base):
     """Representation of the guild set locales by the bot.
