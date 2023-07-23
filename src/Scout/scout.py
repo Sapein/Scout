@@ -4,7 +4,7 @@ The main module for Scout.
 This contains all the main 'logic' for the Discord Bot part of things.
 """
 
-from typing import Optional, Any, Sequence
+from typing import Optional, Any
 
 import aiohttp
 import discord
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 import Scout
 from Scout import config
-from Scout.database import db, models
+from Scout.database import db
 from Scout.database.base import Base
 from Scout.exceptions import *
 from Scout.localization import ScoutTranslator
@@ -216,27 +216,26 @@ async def remove_guild_info(guild: discord.Guild):
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def source(ctx):
-    await ctx.send(await scout.translator.translate_response("get-source", source=Scout.SOURCE))
+    await ctx.send(await scout.translate_response(ctx, "get-source", source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 async def info(ctx):
-    await ctx.send(
-        await scout.translator.translate_response("bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
+    await ctx.send(await scout.translate_response(ctx, "bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def sync(ctx):
     await scout.tree.sync(guild=ctx.guild)
-    await ctx.send(await scout.translator.translate_response("command-sync"))
+    await ctx.send(await scout.translate_response(ctx, "command-sync"))
 
 
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def personality_set(ctx, personality: str):
     scout.translator.set_personality(personality)
-    await ctx.send(await scout.translator.translate_response("personality-set"))
+    await ctx.send(await scout.translate_response(ctx, "personality-set"))
 
 
 scout.run(scout.config["DISCORD_API_KEY"])
