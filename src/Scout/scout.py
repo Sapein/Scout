@@ -4,7 +4,7 @@ The main module for Scout.
 This contains all the main 'logic' for the Discord Bot part of things.
 """
 
-from typing import Optional, Any
+from typing import Optional, Any, Sequence
 
 import aiohttp
 import discord
@@ -51,69 +51,122 @@ class ScoutBot(commands.Bot):
         await self.tree.set_translator(self.translator)
         await self.tree.sync()
 
-    # async def translate_response(self, string: str, locale: Optional[Locale | str] = None, personality: Optional[str] = None,
-    #                              **kwargs) -> Optional[str]:
     async def translate_response(self, ctx: commands.Context, response: str, **kwargs) -> str:
-        async def handle_response(locale1: models.UserLocale, locale2: models.UserLocale) -> str:
-            if locale1.priority > locale2.priority:
-                _ = locale2
-                locale2 = locale1
-                locale1 = _
+        """ A utility function for handling the translation and fallback for bot translations.
 
-            if self.translator.check_supported(response, locale=locale1.locale):
-                return await self.translator.translate_response(response, locale=locale1.locale, **kwargs)
-            elif self.translator.check_supported(response, locale=locale2.locale):
-                return await self.translator.translate_response(response, locale=locale2.locale, **kwargs)
-            else:
-                return await self.translator.translate_response(response, **kwargs)
+        Args:
+            ctx: The message context
+            response: The response to translate
+            **kwargs: Things to add into the translated response.
 
+        Returns:
+            The translated string to send.
+
+        Raises:
+            TranslationError if an error occurs during translation.
+        """
         is_interaction = ctx.interaction is not None
         is_in_server = ctx.guild is not None
 
-        # This is a non-interaction in a DM.
-        if not is_interaction and not is_in_server:
+        if not is_in_server:
             with Session(self.engine) as session:
                 user = db.get_user(ctx.author.id, session=session)
-                if user is None or not user.locales:
+                if user is None or not user.locales and not is_interaction:
                     return await self.translator.translate_response(response, **kwargs)
-                return await handle_response(user.locales.pop(), user.locales.pop())
 
-        # This is an interaction in a DM.
-        elif is_interaction and not is_in_server:
+                locales = [l.locale for l in sorted(list(user.locales), key=lambda x: x.priority)]
+
+                if user.override_discord_locale and is_interaction:
+                    locales.insert(0, ctx.interaction.locale)
+                elif is_interaction:
+                    locales.append(ctx.interaction.locale)
+
+                for locale in locales:
+                    if self.translator.check_supported(response, locale=locale, **kwargs):
+                        return await self.translator.translate_response(response, locale=locale, **kwargs)
+                return await self.translator.translate_response(response, **kwargs)
+
+        elif is_in_server:
             with Session(self.engine) as session:
-                user = db.get_user(ctx.author.id, session=session)
-                discord_locale = ctx.interaction.locale
-                if not user.override_discord_locale and self.translator.check_supported(response, locale=discord_locale):
-                    return await self.translator.translate_response(response, locale=discord_locale, **kwargs)
-                elif not user.override_discord_locale:
-                    if user is None or not user.locales:
+                guild_locale = ctx.guild.preferred_locale
+                guild_db = db.get_guild(guild=ctx.guild.id, snowflake_only=True, session=session)
+
+                if guild_db is None or not guild_db.locales:
+                    prefer_user_locales = guild_db.restrict_user_locales if guild_db is not None else True
+
+                    user = db.get_user(user=ctx.author.id, snowflake_only=True, session=session)
+                    use_user_locales = user.use_locales_in_server if user is not None else False
+                    prefer_user_locales = prefer_user_locales and use_user_locales
+
+                    if prefer_user_locales:
+                        user_locales = [l.locale for l in sorted(user.locales, key=lambda x: x.priority)]
+
+                        if user.override_discord_locale and is_interaction:
+                            user_locales.append(ctx.interaction.locale)
+                        elif is_interaction:
+                            user_locales.insert(0, ctx.interaction.locale)
+
+                        locales = [*user_locales, guild_locale]
+                        for locale in locales:
+                            if self.translator.check_supported(response, locale=locale):
+                                return await self.translator.translate_response(response, locale=locale, **kwargs)
                         return await self.translator.translate_response(response, **kwargs)
-                    return await handle_response(user.locales.pop(), user.locales.pop())
+                    user_locales = [l.locale for l in sorted(user.locales, key=lambda x: x.priority)]
 
-        # This is a non-interaction in a DM.
-        elif not is_interaction and is_in_server:
-            with Session(self.engine) as session:
-                guild = db.get_guild(ctx.guild.id, session=session)
-                preferred_locale = ctx.guild.preferred_locale
-                if preferred_locale and guild is None:
-                    if self.translator.check_supported(response, locale=preferred_locale):
-                        return await self.translator.translate_response(response, locale=preferred_locale, **kwargs)
+                    if user.override_discord_locale and is_interaction:
+                        user_locales.append(ctx.interaction.locale)
+                    elif is_interaction:
+                        user_locales.insert(0, ctx.interaction.locale)
 
-                    user = db.get_user(ctx.author.id, session=session)
-                    if user is None or not user.locales:
+                    locales = [guild_locale, *user_locales]
+                    for locale in locales:
+                        if self.translator.check_supported(response, locale=locale):
+                            return await self.translator.translate_response(response, locale=locale, **kwargs)
+                    return await self.translator.translate_response(response, **kwargs)
+                else:
+                    user = db.get_user(user=ctx.author.id, snowflake_only=True, session=session)
+
+                    use_user_locales = user.use_locales_in_server if user is not None else False
+                    prefer_user_locales = guild_db.restrict_user_locales and use_user_locales
+
+                    guild_locales = [l.locale for l in sorted(guild_db.locales, key=lambda x: x.priority)]
+                    if prefer_user_locales:
+                        user_locales = [] if user is None else [l.locale
+                                                                for l in sorted(user.locales, key=lambda x: x.priority)]
+
+                        if user is not None and user.override_discord_locale and is_interaction:
+                            user_locales.append(ctx.interaction.locale)
+                        elif is_interaction:
+                            user_locales.insert(0, ctx.interaction.locale)
+
+                        if guild_db.override_discord_locale:
+                            guild_locales.append(guild_locale)
+                        else:
+                            guild_locales.insert(0, guild_locale)
+
+                        locales = [*user_locales, *guild_locales]
+                        for locale in locales:
+                            if self.translator.check_supported(response, locale=locale):
+                                return await self.translator.translate_response(response, locale=locale, **kwargs)
                         return await self.translator.translate_response(response, **kwargs)
-                    return await handle_response(user.locales.pop(), user.locales.pop())
-                elif preferred_locale and guild is not None:
-                    if guild.override_discord_locale:
-                        pass
+                    user_locales = [] if user is None else [l.locale
+                                                            for l in sorted(user.locales, key=lambda x: x.priority)]
 
-                elif not guild.override_discord_locale:
-                    pass
+                    if user is not None and user.override_discord_locale and is_interaction:
+                        user_locales.append(ctx.interaction.locale)
+                    elif is_interaction:
+                        user_locales.insert(0, ctx.interaction.locale)
 
-        # This is an interaction in a DM.
-        elif is_interaction and is_in_server:
-            pass
+                    if guild_db.override_discord_locale:
+                        guild_locales.append(guild_locale)
+                    else:
+                        guild_locales.insert(0, guild_locale)
 
+                    locales = [*guild_locales, *user_locales]
+                    for locale in locales:
+                        if self.translator.check_supported(response, locale=locale):
+                            return await self.translator.translate_response(response, locale=locale, **kwargs)
+                    return await self.translator.translate_response(response, **kwargs)
 
     def register_meaning(self, meaning: str, *, suppress_error=False, session: Optional[Session] = None):
         if session is None:

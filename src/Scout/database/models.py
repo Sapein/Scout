@@ -36,7 +36,7 @@ class User(Base):
         id: The primary key and id of the user in our database.
         snowflake: The user's discord snowflake
         override_discord_locale: If this is True then the bot will always prefer the user's set locale.
-        override_server_locale: If enabled on the server, the bot will respond in the user's set/preferred locale.
+        use_locales_in_server: If enabled on the server, the bot will respond in the user's set/preferred locale.
 
         names: A set of all usernames in the UserNames table.
         nations: A set of all nations owned by the user.
@@ -48,7 +48,7 @@ class User(Base):
     snowflake: Mapped[int] = mapped_column(unique=True)
 
     override_discord_locale: Mapped[bool] = mapped_column(default=False)
-    override_server_locale: Mapped[bool] = mapped_column(default=False)
+    use_locales_in_server: Mapped[bool] = mapped_column(default=False)
 
     names: Mapped[set["UserNames"]] = relationship(back_populates="user", cascade="save-update, merge, delete")
     nations: Mapped[set["Nation"]] = relationship(secondary=user_nation, back_populates="users",
@@ -56,6 +56,8 @@ class User(Base):
 
     locales: Mapped[set["UserLocale"]] = relationship(back_populates="user", cascade="save-update, merge, delete")
 
+class UserSettings(Base):
+    pass
 
 class Guild(Base):
     """ A mapping representing the Guild Database Table
@@ -64,7 +66,7 @@ class Guild(Base):
         id: The primary key and id of the Guild in the database.
         snowflake: The guild's discord snowflake
         override_discord_locale: If this is True then the bot will always prefer the guild's set locale.
-        override_user_locales: If enabled on the guild, the bot will only respond in the guild's locales.
+        restrict_user_locales: If enabled on the guild, the bot will only respond in the guild's locales.
 
         regions: A set of all regions that are associated with the Guild.
         roles: A set of all roles that Scout uses/manages.
@@ -76,7 +78,7 @@ class Guild(Base):
     snowflake: Mapped[int] = mapped_column(unique=True, index=True)
 
     override_discord_locale: Mapped[bool] = mapped_column(default=False)
-    override_user_locales: Mapped[bool] = mapped_column(default=False)
+    restrict_user_locales: Mapped[bool] = mapped_column(default=False)
 
     regions: Mapped[set["Region"]] = relationship(secondary=guild_region, back_populates="guilds")
     roles: Mapped[set["Role"]] = relationship(back_populates="guild",
@@ -84,6 +86,8 @@ class Guild(Base):
 
     locales: Mapped[set["GuildLocale"]] = relationship(back_populates="guild", cascade="save-update, merge, delete")
 
+class GuildSettings(Base):
+    pass
 
 class Role(Base):
     """Represents the role table in the database
@@ -203,6 +207,8 @@ class UserLocale(Base):
 
     user: Mapped["User"] = relationship(back_populates="locales")
 
+class GuildNames(Base):
+    pass
 
 class GuildLocale(Base):
     """Representation of the guild set locales by the bot.

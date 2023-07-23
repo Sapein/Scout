@@ -85,7 +85,7 @@ class Translations(commands.Cog):
                 session.add(guild)
 
             original_discord = guild.override_discord_locale
-            original_user = guild.override_user_locales
+            original_user = guild.restrict_user_locales
             guild.override_discord_locale = original_discord if override_locale is None else override_locale
             guild.restrict_user_locale = original_user if restrict_user_locales is None else restrict_user_locales
 
@@ -133,7 +133,7 @@ class Translations(commands.Cog):
                 session.add(user)
 
             original_discord = user.override_discord_locale
-            original_server = user.override_server_locale
+            original_server = user.use_locales_in_server
             user.override_discord_locale = original_discord if override_locale is None else override_locale
             user.restrict_server_locale = original_server if use_in_servers is None else use_in_servers
 
