@@ -148,7 +148,7 @@ class FluentScout:
             self._personalities[personality].has_message(locale, msg_id)
 
     def format_value(self, msg_id: str, args: Optional[dict[str, Any]] = None,
-                     *, locale: Optional[str] = None, personality: Optional[str] = None) -> str:
+                     *, locale: Optional[str] = None, personality: Optional[str] = None) -> str | None:
         """Gets the translated message from the message_id and also adds in any additional information/arguments for it.
 
         Args:
@@ -162,7 +162,7 @@ class FluentScout:
             If no translation is found it will raise Translation Error.
         """
         if personality is None or locale is None:
-            raise TranslationError(context=TranslationContext(location=TranslationContextLocation.other, #type: ignore
+            raise TranslationError(context=TranslationContext(location=TranslationContextLocation.other,  # type: ignore
                                                               data="Translation is messed up."))
 
         supported = self._personalities[personality].supports(locale)
@@ -195,8 +195,7 @@ class FluentScout:
                                                                                          msg.value, args)
             return cast(str, val)
 
-        raise TranslationError(context=TranslationContext(location=TranslationContextLocation.other, #type: ignore
-                                                          data="Translation not found"))
+        return None
 
     def _setup_bundles(self):
         for personality in self._allowed_personalities:
@@ -242,7 +241,7 @@ class ScoutTranslator(Translator):
         return (d.name for d in pathlib.Path("translations").iterdir())
 
     async def translate(self, string: locale_str, locale: Locale | str, context: TranslationContextTypes,
-                        *, personality: Optional[str] = None) -> str:
+                        *, personality: Optional[str] = None) -> str | None:
         """Translates the given string with the additional information into the version for the locale provided.
 
         Arguments:
@@ -252,7 +251,7 @@ class ScoutTranslator(Translator):
             personality: The personality to use, if not passed, it will just use the set personality.
 
         Returns:
-            The string for the translated message.
+            The string for the translated message or none if it can not be translated.
 
         Raises:
             TranslationError: TranslationError is thrown if an error is encountered.
@@ -266,7 +265,8 @@ class ScoutTranslator(Translator):
     async def check_supported(self, string: str, locale: Locale | str, personality: Optional[str] = None) -> bool:
         return self._localization.check_supported(string, locale=locale, personality=personality)
 
-    async def translate_response(self, string: str, locale: Optional[Locale | str] = None, personality: Optional[str] = None,
+    async def translate_response(self, string: str, locale: Optional[Locale | str] = None,
+                                 personality: Optional[str] = None,
                                  **kwargs) -> str:
         """Translates the given string for a Discord message response.
 
@@ -280,9 +280,13 @@ class ScoutTranslator(Translator):
             The string for the translated message.
 
         Raises:
-            TranslationError: TranslationError is thrown if an error is encountered.
+            TranslationError: TranslationError is thrown if an error is encountered or the string can not be translated.
         """
         lstr = locale_str(string, **kwargs)
         context: TranslationContext = TranslationContext(TranslationContextLocation.other, None)
         locale = locale if locale is not None else self._localization.fallback_locale
-        return await self.translate(lstr, locale, context, personality=personality)
+        response = await self.translate(lstr, locale, context, personality=personality)
+        if response is None:
+            raise TranslationError("Translation not found!", string=string, locale=locale, context=context)
+
+        return response

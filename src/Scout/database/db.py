@@ -115,7 +115,8 @@ def remove_region(region: int | models.Region, *, session: Session):
     session.delete(region)
 
 
-def link_guild_region(guild: models.Guild, region: models.Region, *, session: Session) -> tuple[models.Guild, models.Region]:
+def link_guild_region(guild: models.Guild, region: models.Region,
+                      *, session: Session) -> tuple[models.Guild, models.Region]:
     readd(guild, session)
     readd(region, session)
 
@@ -167,7 +168,8 @@ def register_role_meaning(meaning: str, *, session: Session) -> models.Meaning:
     return add_role_meaning(meaning, session=session)
 
 
-def link_role_meaning(role: models.Role, meaning: models.Meaning, *, session: Session) -> tuple[models.Role, models.Meaning]:
+def link_role_meaning(role: models.Role, meaning: models.Meaning,
+                      *, session: Session) -> tuple[models.Role, models.Meaning]:
     readd(meaning, session)
     readd(role, session)
 
@@ -234,12 +236,11 @@ def get_guildrole_with_meaning(guild: int | models.Guild, meaning: int | str | m
             raise Scout.database.exceptions.MeaningNotFound("Meaning does not exist!")
         meaning = meaning_db
 
-
     query = (select(models.Role)
              .where(models.Role.guild == guild)
              .join(models.role_meaning)
              .join(models.Meaning)
-             .where(models.Meaning == meaning) #type: ignore
+             .where(models.Meaning == meaning)  # type: ignore
              .distinct())
 
     return session.scalar(query)
@@ -263,9 +264,9 @@ def get_user_locale_with_priority(user: int | models.User, priority: int,
         if user_db is None:
             raise Scout.database.exceptions.UserNotFound("User does not exist!")
 
-    return session.scalar(select(models.UserLocale)  #type: ignore
-                          .where(models.UserLocale.user_id == user.id) #type: ignore
-                          .where(models.UserLocale.priority == priority) 
+    return session.scalar(select(models.UserLocale)  # type: ignore
+                          .where(models.UserLocale.user_id == user.id)  # type: ignore
+                          .where(models.UserLocale.priority == priority)
                           .distinct()
                           .all())
 
@@ -278,7 +279,7 @@ def get_user_locale_with_language(user: int | models.User, locale: str,
             raise Scout.database.exceptions.UserNotFound("User does not exist!")
         user = user_db
 
-    return session.scalar(select(models.UserLocale) #type: ignore
+    return session.scalar(select(models.UserLocale)  # type: ignore
                           .where(models.UserLocale.user_id == user.id)
                           .where(models.UserLocale.locale == locale)
                           .distinct()
@@ -304,7 +305,7 @@ def get_server_locale_with_priority(guild: int | models.Guild, priority: int,
             raise Scout.database.exceptions.GuildNotFound("Guild does not exist")
         guild = guild_db
 
-    return session.scalar(select(models.GuildLocale) #type: ignore
+    return session.scalar(select(models.GuildLocale)  # type: ignore
                           .where(models.GuildLocale.guild_id == guild.id)
                           .where(models.GuildLocale.priority == priority)
                           .distinct()
@@ -319,7 +320,7 @@ def get_server_locale_with_language(guild: int | models.Guild, locale: str,
             raise Scout.database.exceptions.GuildNotFound("Guild does not exist")
         guild = guild_db
 
-    return session.scalar(select(models.GuildLocale) #type: ignore
+    return session.scalar(select(models.GuildLocale)  # type: ignore
                           .where(models.GuildLocale.guild_id == guild.id)
                           .where(models.GuildLocale.locale == locale)
                           .distinct()

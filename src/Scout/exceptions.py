@@ -34,9 +34,11 @@ class NoNation(Exception):
     pass
 
 
+# noinspection PyPep8Naming
 class InvalidCode_NSVerify(Exception):
     pass
 
 
+# noinspection PyPep8Naming
 class NoCode_NSVerify(Exception):
     pass

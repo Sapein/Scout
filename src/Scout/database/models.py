@@ -56,8 +56,10 @@ class User(Base):
 
     locales: Mapped[set["UserLocale"]] = relationship(back_populates="user", cascade="save-update, merge, delete")
 
-class UserSettings(Base):
-    pass
+
+# class UserSettings(Base):
+#     __tablename__ = "user_settings"
+#     pass
 
 class Guild(Base):
     """ A mapping representing the Guild Database Table
@@ -86,8 +88,10 @@ class Guild(Base):
 
     locales: Mapped[set["GuildLocale"]] = relationship(back_populates="guild", cascade="save-update, merge, delete")
 
-class GuildSettings(Base):
-    pass
+
+# class GuildSettings(Base):
+#     __tablename__ = "guild_settings"
+#     pass
 
 class Role(Base):
     """Represents the role table in the database
@@ -207,8 +211,10 @@ class UserLocale(Base):
 
     user: Mapped["User"] = relationship(back_populates="locales")
 
-class GuildNames(Base):
-    pass
+
+# class GuildNames(Base):
+#     __tablename__ = "guild_names"
+#     pass
 
 class GuildLocale(Base):
     """Representation of the guild set locales by the bot.

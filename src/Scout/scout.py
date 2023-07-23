@@ -111,9 +111,10 @@ class ScoutBot(commands.Bot):
                             if self.translator.check_supported(response, locale=locale):
                                 return await self.translator.translate_response(response, locale=locale, **kwargs)
                         return await self.translator.translate_response(response, **kwargs)
-                    user_locales = [l.locale for l in sorted(user.locales, key=lambda x: x.priority)]
+                    user_locales = [] if user is None else [l.locale
+                                                            for l in sorted(user.locales, key=lambda x: x.priority)]
 
-                    if user.override_discord_locale and is_interaction:
+                    if user is not None and user.override_discord_locale and is_interaction:
                         user_locales.append(ctx.interaction.locale)
                     elif is_interaction:
                         user_locales.insert(0, ctx.interaction.locale)
