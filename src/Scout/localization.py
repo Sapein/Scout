@@ -34,7 +34,14 @@ class ScoutResourceLoader(AbstractResourceLoader):
                                              .format(personality=self.personality)
                                              ).iterdir())
 
-    def resources(self, locale: str, resource_ids: Sequence[str]) -> Sequence['Resource']:
+    def resources(self, locale: str, resource_ids: Sequence[str]) -> Generator[list["Resource"], None, None]:
+        """
+        This is just a wrapper around resources_() to meet the typing requirements for the ABC we use.
+        """
+        for r in self.resources_(locale, resource_ids):
+            yield [r]
+
+    def resources_(self, locale: str, resource_ids: Sequence[str]) -> Sequence['Resource']:
         base_path = self.base_path.format(locale=locale, personality=self.personality)
         resources = []
 
@@ -47,6 +54,7 @@ class ScoutResourceLoader(AbstractResourceLoader):
 
         if resources:
             return resources
+        return []
 
 
 class PersonalityBundle:
@@ -78,7 +86,7 @@ class PersonalityBundle:
     def _create_bundles(self, loader: ScoutResourceLoader, bundle_class, resource_ids: Sequence[str], *args, **kwargs):
         loader.personality = self.personality
         for locale in loader.supported_locales():
-            resources = loader.resources(locale, resource_ids)
+            resources = loader.resources_(locale, resource_ids)
             bundle = bundle_class([locale], *args, **kwargs)
             for resource in resources:
                 bundle.add_resource(resource)
@@ -101,7 +109,7 @@ class FluentScout:
                  supported_personalities: Sequence[str],
                  resource_ids: Sequence[str],
                  resource_loader: ScoutResourceLoader,
-                 fallback_personality: str = "scout", fallback_locale: Optional[str] = None,
+                 fallback_personality: str = "scout", fallback_locale: Optional[str] = "en-US",
                  bundle_class: type[FluentBundle] = FluentBundle,
                  functions: Optional[Mapping[str, Callable[[Any], FluentType]]] = None,
                  use_isolating: bool = False
@@ -117,14 +125,30 @@ class FluentScout:
         self.functions = functions
         self.bundle_class = bundle_class
         self.resource_ids = resource_ids
-        self.fallback_locale = fallback_locale
+        self.fallback_locale = cast(str, fallback_locale)
         self._personalities = {}
         self.fallback_personality = fallback_personality
         self._allowed_personalities = supported_personalities if supported_personalities is not None else ["scout"]
         self._setup_bundles()
 
+    def check_supported(self, msg_id: str, *, locale: str, personality: Optional[str] = None) -> bool:
+        """Checks if the msg_id is supported with the given locale and personality.
+
+        Args:
+            msg_id: The message-id in the .ftl file to use
+            locale: The locale to check.
+            personality: The personality to use for the message, if not provided it will use the default.
+
+        Returns:
+            Whether the msg_id is supported by the locale and personality. If the locale and personality is supported.
+        """
+        personality = personality if personality is not None else self.fallback_personality
+
+        return self._personalities[personality].supports(locale) and \
+            self._personalities[personality].has_message(locale, msg_id)
+
     def format_value(self, msg_id: str, args: Optional[dict[str, Any]] = None,
-                     *, locale: str = None, personality: str = None) -> Optional[str]:
+                     *, locale: Optional[str] = None, personality: Optional[str] = None) -> str:
         """Gets the translated message from the message_id and also adds in any additional information/arguments for it.
 
         Args:
@@ -134,11 +158,11 @@ class FluentScout:
             personality: The personality to use for the message.
 
         Returns:
-            The translated and filled message from the .ftl file for the specified or fallback locale. If no translation
-            is found it will return none.
+            The translated and filled message from the .ftl file for the specified or fallback locale. 
+            If no translation is found it will raise Translation Error.
         """
         if personality is None or locale is None:
-            raise TranslationError(context=TranslationContext(location=TranslationContextLocation.other,
+            raise TranslationError(context=TranslationContext(location=TranslationContextLocation.other, #type: ignore
                                                               data="Translation is messed up."))
 
         supported = self._personalities[personality].supports(locale)
@@ -171,7 +195,8 @@ class FluentScout:
                                                                                          msg.value, args)
             return cast(str, val)
 
-        return None
+        raise TranslationError(context=TranslationContext(location=TranslationContextLocation.other, #type: ignore
+                                                          data="Translation not found"))
 
     def _setup_bundles(self):
         for personality in self._allowed_personalities:
@@ -216,8 +241,8 @@ class ScoutTranslator(Translator):
     def _locale_generator() -> Generator[str, Any, Any]:
         return (d.name for d in pathlib.Path("translations").iterdir())
 
-    async def translate(self, string: locale_str, locale: Locale, context: TranslationContextTypes,
-                        *, personality: Optional[str] = None) -> Optional[str]:
+    async def translate(self, string: locale_str, locale: Locale | str, context: TranslationContextTypes,
+                        *, personality: Optional[str] = None) -> str:
         """Translates the given string with the additional information into the version for the locale provided.
 
         Arguments:
@@ -227,7 +252,7 @@ class ScoutTranslator(Translator):
             personality: The personality to use, if not passed, it will just use the set personality.
 
         Returns:
-            The string for the translated message, if it is not found it will return None.
+            The string for the translated message.
 
         Raises:
             TranslationError: TranslationError is thrown if an error is encountered.
@@ -238,8 +263,11 @@ class ScoutTranslator(Translator):
         return self._localization.format_value(string.message, locale=str(locale), personality=personality,
                                                args=string.extras)
 
-    async def translate_response(self, string: str, locale: Optional[Locale] = None, personality: Optional[str] = None,
-                                 **kwargs) -> Optional[str]:
+    async def check_supported(self, string: str, locale: Locale | str, personality: Optional[str] = None) -> bool:
+        return self._localization.check_supported(string, locale=locale, personality=personality)
+
+    async def translate_response(self, string: str, locale: Optional[Locale | str] = None, personality: Optional[str] = None,
+                                 **kwargs) -> str:
         """Translates the given string for a Discord message response.
 
         Arguments:
@@ -249,11 +277,12 @@ class ScoutTranslator(Translator):
             **kwargs: The additional information for the translation string for any variables in the string.
 
         Returns:
-            The string for the translated message, if it is not found it will return None.
+            The string for the translated message.
 
         Raises:
             TranslationError: TranslationError is thrown if an error is encountered.
         """
         lstr = locale_str(string, **kwargs)
-        context = TranslationContext(TranslationContextLocation.other, None)
+        context: TranslationContext = TranslationContext(TranslationContextLocation.other, None)
+        locale = locale if locale is not None else self._localization.fallback_locale
         return await self.translate(lstr, locale, context, personality=personality)

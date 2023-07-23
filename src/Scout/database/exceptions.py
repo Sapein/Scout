@@ -59,3 +59,10 @@ class GuildNotFound(NotFound):
     This is raised if a guild is not found in the DB
     """
     pass
+
+
+class MeaningNotFound(NotFound):
+    """
+    This is raised if a meaning is not found in the DB.
+    """
+    pass

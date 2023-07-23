@@ -2,7 +2,7 @@
 This is a more 'high level' of sorts DB interface.
 """
 from functools import wraps
-from typing import Optional, cast
+from typing import Optional, cast, Any
 
 from sqlalchemy import create_engine, select, or_, inspect
 from sqlalchemy.engine import URL
@@ -30,7 +30,7 @@ def db_connect(dialect: str, driver: Optional[str], table: Optional[str], login:
     return create_engine(uri)
 
 
-def readd(obj: object, session: Session) -> object:
+def readd(obj: Any, session: Session) -> object:
     if inspect(obj).detached:
         session.add(session)
     return obj
@@ -71,7 +71,7 @@ def remove_nation(nation: int | models.Nation, *, session: Session):
     session.delete(nation)
 
 
-def link_user_nation(user: models.User, nation: models.Nation, *, session) -> (models.User, models.Nation):
+def link_user_nation(user: models.User, nation: models.Nation, *, session) -> tuple[models.User, models.Nation]:
     readd(user, session)
     readd(nation, session)
     user.nations.add(nation)
@@ -106,7 +106,7 @@ def register_region(region_name: str, *, session: Session) -> models.Region:
     return new_region
 
 
-def remove_region(region: int | models.Guild, *, session: Session):
+def remove_region(region: int | models.Region, *, session: Session):
     if isinstance(region, int):
         region_db = get_region(region, session=session)
         if region_db is None:
@@ -115,7 +115,7 @@ def remove_region(region: int | models.Guild, *, session: Session):
     session.delete(region)
 
 
-def link_guild_region(guild: models.Guild, region: models.Region, *, session: Session) -> (models.Guild, models.Region):
+def link_guild_region(guild: models.Guild, region: models.Region, *, session: Session) -> tuple[models.Guild, models.Region]:
     readd(guild, session)
     readd(region, session)
 
@@ -167,7 +167,7 @@ def register_role_meaning(meaning: str, *, session: Session) -> models.Meaning:
     return add_role_meaning(meaning, session=session)
 
 
-def link_role_meaning(role: models.Role, meaning: models.Meaning, *, session: Session) -> (models.Role, models.Meaning):
+def link_role_meaning(role: models.Role, meaning: models.Meaning, *, session: Session) -> tuple[models.Role, models.Meaning]:
     readd(meaning, session)
     readd(role, session)
 
@@ -177,61 +177,69 @@ def link_role_meaning(role: models.Role, meaning: models.Meaning, *, session: Se
     return role, meaning
 
 
-def get_user(user: int, *, snowflake_only=False, session: Session) -> models.User:
+def get_user(user: int, *, snowflake_only=False, session: Session) -> Optional[models.User]:
     if snowflake_only:
         return session.scalar(select(models.User).where(models.User.snowflake == user))
     return session.scalar(select(models.User).where(or_(models.User.id == user, models.User.snowflake == user)))
 
 
-def get_guild(guild: int, *, snowflake_only=True, session: Session) -> models.Guild:
+def get_guild(guild: int, *, snowflake_only=True, session: Session) -> Optional[models.Guild]:
     if snowflake_only:
         return session.scalar(select(models.Guild).where(models.Guild.snowflake == guild))
     return session.scalar(
         select(models.Guild).where(or_(models.Guild.id == guild, models.Guild.snowflake == guild)))
 
 
-def get_region(region: int | str, *, session: Session) -> models.Region:
+def get_region(region: int | str, *, session: Session) -> Optional[models.Region]:
     return session.scalar(select(models.Region).where(or_(models.Region.id == region, models.Region.name == region)))
 
 
-def get_nation(nation: int | str, *, session: Session) -> models.Nation:
+def get_nation(nation: int | str, *, session: Session) -> Optional[models.Nation]:
     return session.scalar(select(models.Nation).where(or_(models.Nation.id == nation, models.Nation.name == nation)))
 
 
-def get_role(role: int, *, snowflake_only=False, session: Session) -> models.Role:
+def get_role(role: int, *, snowflake_only=False, session: Session) -> Optional[models.Role]:
     if snowflake_only:
         return session.scalar(select(models.Role).where(models.Role.snowflake == role))
     return session.scalar(select(models.Role).where(or_(models.Role.id == role, models.Role.snowflake == role)))
 
 
-def get_meaning(meaning: int | str, *, session: Session) -> models.Meaning:
+def get_meaning(meaning: int | str, *, session: Session) -> Optional[models.Meaning]:
     return session.scalar(
         select(models.Meaning).where(or_(models.Meaning.id == meaning, models.Meaning.meaning == meaning)))
 
 
 def update_role(role: int | models.Role, new_snowflake: int, *, snowflake_only=False, session: Session) -> models.Role:
     if isinstance(role, int):
-        role = get_role(role, snowflake_only=snowflake_only, session=session)
-        if role is not None:
+        prole = get_role(role, snowflake_only=snowflake_only, session=session)
+        if prole is None:
             raise Scout.database.exceptions.RoleNotFound("Role with ID or Snowflake {} not found!".format(role))
+        role = prole
 
     role.snowflake = new_snowflake
     return role
 
 
 def get_guildrole_with_meaning(guild: int | models.Guild, meaning: int | str | models.Meaning,
-                               *, snowflake_only=True, session: Session) -> models.Role:
+                               *, snowflake_only=True, session: Session) -> Optional[models.Role]:
     if not isinstance(guild, models.Guild):
-        guild = get_guild(guild, snowflake_only=snowflake_only, session=session)
+        guild_db = get_guild(guild, snowflake_only=snowflake_only, session=session)
+        if guild_db is None:
+            raise Scout.database.exceptions.GuildNotFound("Guild does not exist!")
+        guild = guild_db
 
     if not isinstance(meaning, models.Meaning):
-        meaning = get_meaning(meaning, session=session)
+        meaning_db = get_meaning(meaning, session=session)
+        if meaning_db is None:
+            raise Scout.database.exceptions.MeaningNotFound("Meaning does not exist!")
+        meaning = meaning_db
+
 
     query = (select(models.Role)
              .where(models.Role.guild == guild)
              .join(models.role_meaning)
              .join(models.Meaning)
-             .where(models.Meaning == cast(meaning, models.Meaning))
+             .where(models.Meaning == meaning) #type: ignore
              .distinct())
 
     return session.scalar(query)
@@ -240,49 +248,63 @@ def get_guildrole_with_meaning(guild: int | models.Guild, meaning: int | str | m
 def add_user_locale(user: int | models.User, locale: str, priority: int,
                     *, snowflake_only=True, session: Session) -> models.UserLocale:
     if not isinstance(user, models.User):
-        user = get_user(user, snowflake_only=snowflake_only, session=session)
+        user_db = get_user(user, snowflake_only=snowflake_only, session=session)
+        if user_db is None:
+            raise Scout.database.exceptions.UserNotFound("User not found!")
+        user = user_db
 
     return models.UserLocale(user=user, locale=locale, priority=priority)
 
 
 def get_user_locale_with_priority(user: int | models.User, priority: int,
-                                  *, snowflake_only=True, session: Session) -> models.UserLocale:
+                                  *, snowflake_only=True, session: Session) -> Optional[models.UserLocale]:
     if not isinstance(user, models.User):
-        user = get_user(user, snowflake_only=snowflake_only, session=session)
+        user_db = get_user(user, snowflake_only=snowflake_only, session=session)
+        if user_db is None:
+            raise Scout.database.exceptions.UserNotFound("User does not exist!")
 
-    return session.scalar(select(models.UserLocale)
-                          .where(models.UserLocale.user_id == user.id)
-                          .where(models.UserLocale.priority == priority)
+    return session.scalar(select(models.UserLocale)  #type: ignore
+                          .where(models.UserLocale.user_id == user.id) #type: ignore
+                          .where(models.UserLocale.priority == priority) 
                           .distinct()
                           .all())
 
 
 def get_user_locale_with_language(user: int | models.User, locale: str,
-                                  *, snowflake_only=True, session: Session) -> models.UserLocale:
+                                  *, snowflake_only=True, session: Session) -> Optional[models.UserLocale]:
     if not isinstance(user, models.User):
-        user = get_user(user, snowflake_only=snowflake_only, session=session)
+        user_db = get_user(user, snowflake_only=snowflake_only, session=session)
+        if user_db is None:
+            raise Scout.database.exceptions.UserNotFound("User does not exist!")
+        user = user_db
 
-    return session.scalar(select(models.UserLocale)
+    return session.scalar(select(models.UserLocale) #type: ignore
                           .where(models.UserLocale.user_id == user.id)
                           .where(models.UserLocale.locale == locale)
                           .distinct()
                           .all())
 
 
-def add_server_locale(user: int | models.Guild, locale: str, priority: int,
+def add_server_locale(guild: int | models.Guild, locale: str, priority: int,
                       *, snowflake_only=True, session: Session) -> models.GuildLocale:
-    if not isinstance(user, models.Guild):
-        user = get_user(user, snowflake_only=snowflake_only, session=session)
+    if not isinstance(guild, models.Guild):
+        guild_db = get_guild(guild, snowflake_only=snowflake_only, session=session)
+        if guild_db is None:
+            raise Scout.database.exceptions.GuildNotFound("Guild does not exist")
+        guild = guild_db
 
-    return models.GuildLocale(user=user, locale=locale, priority=priority)
+    return models.GuildLocale(guild=guild, locale=locale, priority=priority)
 
 
 def get_server_locale_with_priority(guild: int | models.Guild, priority: int,
-                                    *, snowflake_only=True, session: Session) -> models.GuildLocale:
+                                    *, snowflake_only=True, session: Session) -> Optional[models.GuildLocale]:
     if not isinstance(guild, models.Guild):
-        guild = get_guild(guild, snowflake_only=snowflake_only, session=session)
+        guild_db = get_guild(guild, snowflake_only=snowflake_only, session=session)
+        if guild_db is None:
+            raise Scout.database.exceptions.GuildNotFound("Guild does not exist")
+        guild = guild_db
 
-    return session.scalar(select(models.GuildLocale)
+    return session.scalar(select(models.GuildLocale) #type: ignore
                           .where(models.GuildLocale.guild_id == guild.id)
                           .where(models.GuildLocale.priority == priority)
                           .distinct()
@@ -290,11 +312,14 @@ def get_server_locale_with_priority(guild: int | models.Guild, priority: int,
 
 
 def get_server_locale_with_language(guild: int | models.Guild, locale: str,
-                                    *, snowflake_only=True, session: Session) -> models.GuildLocale:
+                                    *, snowflake_only=True, session: Session) -> Optional[models.GuildLocale]:
     if not isinstance(guild, models.Guild):
-        guild = get_guild(guild, snowflake_only=snowflake_only, session=session)
+        guild_db = get_guild(guild, snowflake_only=snowflake_only, session=session)
+        if guild_db is None:
+            raise Scout.database.exceptions.GuildNotFound("Guild does not exist")
+        guild = guild_db
 
-    return session.scalar(select(models.GuildLocale)
+    return session.scalar(select(models.GuildLocale) #type: ignore
                           .where(models.GuildLocale.guild_id == guild.id)
                           .where(models.GuildLocale.locale == locale)
                           .distinct()
