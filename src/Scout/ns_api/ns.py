@@ -1,9 +1,11 @@
 import asyncio
+from enum import Enum
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional, Self
 
 import aiohttp
+from aiohttp import ClientResponse
 
 import Scout
 from Scout.ns_api.region import Region
@@ -17,6 +19,11 @@ __all__ = ["NationStatesClient"]
 class Allowable:
     amount: int
     seconds: int
+
+
+class DataDumpType(Enum):
+    NATION = "nation"
+    REGION = "region"
 
 
 @dataclass
@@ -48,6 +55,7 @@ def create_user_agent(contact_info: str, nation: str, region: Optional[str]):
 class NationStatesClient:
     api_version = 12
     base_url = "https://nationstates.net/cgi-bin/api.cgi?"
+    data_dump_base_url = "https://nationstates.net/pages/"
     version_shard = "a=version"
     nation_shard = "nation={}"
     region_shard = "region={}"
@@ -67,6 +75,22 @@ class NationStatesClient:
         if token is None:
             return "https://nationstates.net/page=verify_login"
         return "https://nationstates.net/page=verify_login?token={}".format(token)
+
+    async def get_daily_dump(self, dump_type: DataDumpType) -> str:
+        """Gets the daily data dump from NS and stores it locally.
+
+        Arguments:
+            dump_type: The type of the data dump to get
+
+        Returns:
+            The path to the data dump file.
+        """
+        url = "{}{}".format(self.data_dump_base_url, dump_type.value())
+        response = await self._make_request(url, self.headers, return_raw=True)
+        with open("./{}.xml.gz".format(dump_type.value()), 'wb') as f:
+            async for data, _ in response.content.iter_chunks():
+                f.write(data)
+        return "{}.xml.gz".format(dump_type.value())
 
     async def get_region(self, region: str) -> Region:
         url = "{}{}".format(self.base_url, self.region_shard.format(region.replace(" ", "_").casefold()))
@@ -113,11 +137,13 @@ class NationStatesClient:
         nation = Nation(name, region)
         return bool(int(verified)), nation
 
-    async def _make_request(self, url, headers) -> str:
+    async def _make_request(self, url, headers, *, return_raw = False) -> str | ClientResponse:
         if self.requests.remaining > 0 and self.requests.retry_after is None:
             async with self.session.get(url, headers=headers) as response:
                 self.update_requests(response.headers)
                 if response.status != 429:
+                    if return_raw:
+                        return response
                     return await response.text()
                 return await self._make_request(url, headers)
         else:

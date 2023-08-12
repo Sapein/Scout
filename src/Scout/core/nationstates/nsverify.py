@@ -18,20 +18,43 @@ from Scout.ns_api.nation import Nation
 VERIFIED = "verified"
 RESIDENT = "resident"
 
+utc = datetime.timezone.utc
+time = datetime.time(hour=6, minute=00, tzinfo=utc)
+
 
 class NSVerify(commands.Cog):
-    """
-    NSVerify Cog
+    """A cog that provides the NSVerify functionality for Nerris.
+
+    Attributes:
+        ns_client: The ns_client used for ns-api queries.
+        users_verifying: The users currently attempting to verify themselves.
     """
     ns_client: ns.NationStatesClient
     users_verifying: dict[Any, Any] = {}
 
     def __init__(self, bot):
+        """Initalizes the cog.
+
+        Args:
+            bot: The DiscordBot object.
+        """
         self.scout = bot
         self.scout.register_meaning("verified", suppress_error=True)
         self.scout.register_meaning("resident", suppress_error=True)
+        self.update_nations.start()
+
+
+    @tasks.loop(time=time)
+    async def update_nations(self):
+        """Handle the automatic update of nations.
+        """
+        # Download Update Information
+        # Parse Update Information
+        pass
 
     async def cog_load(self):
+        """The function that the bot runs when the Cog is loaded.
+        """
         user_agent = ns.create_user_agent(self.scout.config["CONTACT_INFO"],
                                           self.scout.config["NATION"],
                                           self.scout.config["REGION"])
@@ -39,8 +62,30 @@ class NSVerify(commands.Cog):
         self.ns_client = await ns.NationStatesClient(self.scout.reusable_session,
                                                      user_agent=user_agent).build()
 
+    async def cog_unload(self) -> None:
+        """Things to do when the cog is unloaded/at bot shutdown.
+        """
+        self.update_nations.stop()
+
     def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                    guild: discord.Guild, overwrite: Optional[bool] = False) -> str:
+        """Links the discord roles to the actual meaning for a server.
+
+        Args:
+            verified_role: The role to use as the basic verified role, if not included a verified role will not be added.
+            resident_role: The role to use as the role for residents in the server's region.
+                If not included, it will not be added.
+
+            guild: The discord guild this all applies to.
+            overwrite: If set to true, then the bot will overwrite existing verified and/or resident roles setup
+                with the bot.
+
+        Returns:
+            Returns a success message for the bot to send.
+
+        Raises:
+            Scout.exceptions.NoRoles: No roles were given to the bot.
+        """
         if verified_role is None and resident_role is None:
             raise Scout.exceptions.NoRoles()
 
@@ -63,6 +108,17 @@ class NSVerify(commands.Cog):
     @commands.guild_only()
     async def link_region(self, ctx, region_name: str, verified_role: Optional[discord.Role],
                           resident_role: Optional[discord.Role]):
+        """The command that links the discord server and NationStates Region together.
+
+        If no roles are given, it only links the server and region together.
+
+        Parameters:
+            ctx: The message context.
+            region_name: The name of the ns region to use.
+
+            verified_role: The discord role to use as the verified with the bot role.
+            resident_role: The discord role to use as the resident bot role.
+        """
         region = await self.ns_client.get_region(region_name)
         with Session(self.scout.engine) as session:
             new_region = db.register_region(region.name, session=session)
@@ -96,6 +152,13 @@ class NSVerify(commands.Cog):
     @commands.check_any(commands.has_guild_permissions(administrator=True), commands.is_owner())
     @commands.guild_only()
     async def unlink_region(self, ctx, region_name: str):
+        """Unlink a region from a Discord server.
+
+
+        Parameters:
+            ctx: The message context
+            region_name: The name of the region to unlink from the server.
+        """
         with Session(self.scout.engine) as session:
             ns_region = await self.ns_client.get_region(region_name.replace(" ", "_"))
             region = db.get_region(ns_region.name, session=session)
@@ -109,6 +172,12 @@ class NSVerify(commands.Cog):
             await ctx.send("I couldn't find that region or guild...")
 
     async def verify_dm_flow(self, ctx, nation: str):
+        """This handles the verification flow in Direct Messages.
+
+        Parameters:
+            ctx: The original verification command message context
+            nation: The nation to use for this.
+        """
         await ctx.send("Alrighty! Please check your DMs", ephemeral=True)
         message = await ctx.message.author.send(
             ("Hi please log into your {} now. After doing so go to this link: {}\n"
@@ -127,8 +196,12 @@ class NSVerify(commands.Cog):
     @commands.hybrid_command()  # type: ignore
     @commands.guild_only()
     async def verify_nation(self, ctx, code: Optional[str], nation: str):
-        """
-        Verifies a nation and assigns it to a user.
+        """ The discord command to verify a nation and add it to a user.
+
+        Parameters:
+            ctx: The message context for the command.
+            code: If you know what you are doing you can provide the NS Verification Code to directly verify with one command.
+            nation: The name of the nation you are verifying with.
         """
         nation = await self.ns_client.get_nation(nation.replace(" ", "_"))
         with Session(self.scout.engine) as session:
@@ -169,6 +242,11 @@ class NSVerify(commands.Cog):
 
     @commands.Cog.listener('on_message')
     async def verify_nation_msg(self, message):
+        """An on_message listener to actually handle the DM verification portion of Verification.
+
+        Arguments:
+            message: The discord message that triggered this.
+        """
         if message.guild is not None or message.author.name in self.users_verifying:
             return
         (nation, _message) = self.users_verifying[message.author.name]
@@ -198,6 +276,12 @@ class NSVerify(commands.Cog):
     @commands.hybrid_command()  # type: ignore
     @commands.guild_only()
     async def unverify_nation(self, ctx, nation_name: str):
+        """A command to remove a nation that you've verified.
+
+        Parameters:
+            ctx: The message context
+            nation_name: The name of the nation to remove.
+        """
         with Session(self.scout.engine) as session:
             user = db.get_user(ctx.author.id, session=session)
 
@@ -227,6 +311,15 @@ class NSVerify(commands.Cog):
     @commands.guild_only()
     async def link_roles(self, ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                          overwrite_roles: Optional[bool] = False):
+        """The command to actually link two roles to the discord server, if you already set the server's region.
+
+        Parameters:
+            ctx: The command context.
+            verified_role: The role to use for users that are verified with the bot, but meet no other criteria.
+            resident_role: The role to use for users that are in the server's associated region.
+
+            overwrite_roles: If this is set, then the bot will replace any previously configured roles.
+        """
         try:
             await ctx.send(self.link_roles(verified_role, resident_role, ctx.message, overwrite=overwrite_roles))
 
@@ -254,9 +347,22 @@ class NSVerify(commands.Cog):
     @commands.guild_only()
     async def unlink_roles(self, ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                            remove_roles: Optional[bool] = True):
+        """A command to remove the roles from being managed by the bot.
+
+        Parameters:
+            ctx: The command context.
+            verified_role: The verified role to remove, if you want to remove it.
+            resident_role: The resident role to remove, if you want to remove it.
+
+            remove_roles: If set to True, it will also remove the roles from any users with the role set.
+        """
         unlinked_roles: list[discord.Role] = []
+
+        # Note: Check the remove_role function
         if verified_role and (res := self.scout.remove_role(verified_role)) is not None:
             unlinked_roles.append(res)
+
+        # Note: Check the remove_role function
         if resident_role and (res := self.scout.remove_role(resident_role)) is not None:
             unlinked_roles.append(res)
 
@@ -271,6 +377,16 @@ class NSVerify(commands.Cog):
 
     @staticmethod
     async def register_nation(nation: Nation, message: discord.Message, *, session: Session) -> str:
+        """Actually register the 'nation' to the bot.
+
+        Parameters:
+            nation: The NS Nation to use.
+            message: The message to use for responses.
+            session: The database session.
+
+        Returns:
+            A string to send to user.
+        """
         region = db.get_region(nation.region, session=session)
         if region is None:
             region = db.register_region(nation.region, session=session)
@@ -282,6 +398,13 @@ class NSVerify(commands.Cog):
 
     @staticmethod
     async def eligible_nsv_role(user: discord.Member, guild: models.Guild, session: Session) -> str | None:
+        """Determine what roles the user is elligble for in the given server.
+
+        Parameters:
+            user: The discord user
+            guild: The discord guild
+            session: The database session to use.
+        """
         eligible_role = None
         user_db = db.get_user(user.id, session=session)
 
@@ -298,6 +421,11 @@ class NSVerify(commands.Cog):
 
     @staticmethod
     async def ineligible_nsv_roles(eligible_role: str | None) -> list[str]:
+        """Determine if there are any roles we are not elligble for.
+
+        Parameters:
+            elligble_role: The role they are elligble for in the server.
+        """
         if eligible_role == RESIDENT:
             return [VERIFIED]
         elif eligible_role == VERIFIED:

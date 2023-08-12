@@ -106,15 +106,6 @@ def register_region(region_name: str, *, session: Session) -> models.Region:
     return new_region
 
 
-def remove_region(region: int | models.Region, *, session: Session):
-    if isinstance(region, int):
-        region_db = get_region(region, session=session)
-        if region_db is None:
-            raise Scout.database.exceptions.RegionNotFound("Region with id {} not found!".format(region))
-        region = region_db
-    session.delete(region)
-
-
 def link_guild_region(guild: models.Guild, region: models.Region,
                       *, session: Session) -> tuple[models.Guild, models.Region]:
     readd(guild, session)

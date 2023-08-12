@@ -37,6 +37,8 @@ class ScoutBot(commands.Bot):
     translator: ScoutTranslator
 
     async def on_ready(self):
+        """Method to handle when the bot is ready.
+        """
         self.reusable_session = aiohttp.ClientSession()
         self.engine = db.db_connect(dialect=self.config["DB_DIALECT"],
                                     driver=self.config.get("DB_DRIVER", None),
@@ -170,6 +172,17 @@ class ScoutBot(commands.Bot):
                     return await self.translator.translate_response(response, **kwargs)
 
     def register_meaning(self, meaning: str, *, suppress_error=False, session: Optional[Session] = None):
+        """Register a role 'meaning' with the bot.
+
+        Parameters:
+            meaning: The string representing what the role is supposed to 'mean'.
+            suppress_error: Whether or not an Exception should be thrown,
+                if not then it attempts to add the meaning anyways.
+            session: A DB session, if not provided the bot will create one.
+
+        Raises:
+            MeaningRegistered: An Error indicating the meaning was already registered with the bot.
+        """
         if session is None:
             with Session(self.engine) as session:
                 return self.register_meaning(meaning, suppress_error=suppress_error, session=session)
@@ -181,9 +194,23 @@ class ScoutBot(commands.Bot):
         self.meanings[meaning] = meaning_db.id
 
     async def register_meaning_async(self, meaning: str, *, suppress_error=False, session: Optional[Session] = None):
+        """An async wrapper around register_meaning.
+
+        This is just a wrapper around the regular register_meaning function for the time being.
+
+        Arguments:
+            meaning: The 'role meaning' to register with the bot.
+            suppress_error: Whether or not to suppress the MeaningRegistered Exception.
+            session: The DB session to use to add the meaning to the database. If not provided, it will create one.
+
+        Raises:
+            MeaningRegistered: An error indicating that the meaning has already been registered with the bot.
+        """
         self.register_meaning(meaning, suppress_error=suppress_error, session=session)
 
     async def close(self, *args, **kwargs):
+        """This is called when the bot is shutting down and closing connections.
+        """
         await super().close(*args, **kwargs)
         await self.reusable_session.close()
 
@@ -195,6 +222,12 @@ scout.config = _config
 
 @scout.listen('on_guild_role_update')
 async def update_stored_roles(before: discord.Role, after: discord.Role):
+    """Handles the updating of stored roles when they change.
+
+    Parameters:
+        before: The discord role before the update.
+        after: The discord role after the update.
+    """
     with Session(scout.engine) as session:
         role_db = db.get_role(before.id, snowflake_only=True, session=session)
         if before.id != after.id and role_db:
@@ -204,12 +237,22 @@ async def update_stored_roles(before: discord.Role, after: discord.Role):
 
 @scout.listen('on_guild_role_delete')
 async def remove_stored_roles(role: discord.Role):
+    """Handles the removing of stored roles when they are deleted.
+
+    Parameters:
+        role: The role that has been removed.
+    """
     with Session(scout.engine) as session:
         db.remove_role(role.id, snowflake_only=True, session=session)
 
 
 @scout.listen('on_guild_remove')
 async def remove_guild_info(guild: discord.Guild):
+    """Handles the removing of guild information when the bot is kicked from a server.
+
+    Parameters:
+        guild: The guild the bot was kicked from.
+    """
     with Session(scout.engine) as session:
         db.remove_guild(guild.id, snowflake_only=True, session=session)
 
@@ -217,17 +260,32 @@ async def remove_guild_info(guild: discord.Guild):
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def source(ctx):
+    """The command to get a link to the bot's source code.
+
+    Parameters:
+        ctx: The command context.
+    """
     await ctx.send(await scout.translate_response(ctx, "get-source", source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 async def info(ctx):
+    """The command to get the bot's information.
+
+    Parameters:
+        ctx: The command context.
+    """
     await ctx.send(await scout.translate_response(ctx, "bot-info", version=Scout.__VERSION__, source=Scout.SOURCE))
 
 
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def sync(ctx):
+    """An owner-command to sync the bot's global command-tree to the command-tree of the guild.
+
+    Parameters:
+        ctx: The context of the command.
+    """
     await scout.tree.sync(guild=ctx.guild)
     await ctx.send(await scout.translate_response(ctx, "command-sync"))
 
@@ -235,6 +293,12 @@ async def sync(ctx):
 @scout.hybrid_command()  # type: ignore
 @commands.is_owner()
 async def personality_set(ctx, personality: str):
+    """An owner command to set the bot's personality at run-time.
+
+    Parameters:
+        ctx: The context of the command.
+        personality: The personality to use.
+    """
     scout.translator.set_personality(personality)
     await ctx.send(await scout.translate_response(ctx, "personality-set"))
 
