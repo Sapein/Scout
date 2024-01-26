@@ -1,15 +1,10 @@
-# FROM registry.hub.docker.com/library/python:3.11.3-slim
-FROM docker.io/library/python:3.11.3-alpine
+FROM docker.io/library/python:3.12
 
-COPY requirements.txt /tmp
-
-RUN pip install -r /tmp/requirements.txt
-
-COPY . /scout
+COPY . /scoutbot
 
 
-RUN pip install /scout
+RUN pip install scoutbot/
 
-WORKDIR /scout
+WORKDIR /scoutbot
 
 CMD ["python3", "-m", "Scout.scout"]

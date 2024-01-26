@@ -4,14 +4,16 @@ This bot mainly performs certain actions -- such as NationStates verification an
 
 ## Features
 - NationStates Verification
+- i18n/l10n support.
 
 
 ## Requirements
-- Python 3.11 or greater
+- Python 3.12 or greater
 - discord.py v2.0
 - aiohttp v3.8
 - aiodns v3.0
 - SQLAlchemy v2.0
+- Project Fluent
 
 ## Quick Start
 To quickly get started with Scout, you first need to register a bot with discord and get the API Key. After that,
@@ -33,6 +35,16 @@ The source code within this repository is licensed under the AGPL v3 license,
 all non-code work is licensed under the CC-BY-NC-SA 4.0 License as well.
 
 # QnA/FaQ
+### What does i18n/l10n mean?  
+i18n is internationalization and l10n is localization. The 18 in i18n comes from the amount of letters between the i and
+then n in internationalization, and the 10 in l10n is the number of letters between l and n in localization!
+
+### Wait does this bot really have i18n/l10n support?  
+Yes! It's still not 100%, but this bot has had a lot of effort put into creating tooling that works for the needs of the
+bot, and also has proper support for i18n/l10n! This required a good amount of support, but while doing this I also added
+support for 'personalities', which means you can also somewhat personalize the responses of the bot *WITHOUT* needing to
+get into the code! 
+
 ### What's with the name "Scout"?
 The name Scout is the name for the bot, based off of the fact that this bot was initially constructed for The Campfire,
 a Camp-themed Discord Server. The initial branding used the name "Nerris", which is a character from the show CampCamp,
@@ -46,15 +58,16 @@ being unique for Discord Bots.
 ### Why not use Poetry?  
 Because it doesn't follow the standards as set forth by the various PEPs around packaging. When it does, I'll consider it.
 
-### Why do you have a `setup.cfg` file? Why not just put it all in the `pyproject.toml` file?  
-It is because, unfortunately, setuptools has not stabilized everything I would need for the `pyproject.toml` file to work
-for our use-case. While it may be the case that it is perfectly stable and won't change, I don't have a guarantee and
-I do not want to deal with that. So I have a `setup.cfg` file for now. Once they do stabilize the features I would need,
-I will gladly switch to a singular `pyproject.toml` file.
+### What happened to the `setup.cfg` file?/Why have you migrated to a singular `pyproject.toml` file?
+Originally, setuptools has not stableized everything I needed for using only a `pyproject.toml` file. However, since then
+it has been updated to be stable, as such I migrated everything over to the singular `pyproject.toml` file.
 
 ### Should I use this?  
 If this meets your needs! This bot is not for everyone, and currently only really does one thing: "NS Verification"
 and giving roles based upon that verification. That's about it. 
+
+This bot, does provide i18n/l10n support both utilizing built-in discord functionalities and also providing additional
+functionality for locales not fully supported by Discord, which other bots don't really have.
 
 However, if the current bot(s) to do NationStates verification aren't really up to snuff for you, and you're potentially
 fine with self-hosting, feel free to use Scout and also to contribute!
