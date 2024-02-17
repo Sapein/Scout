@@ -131,6 +131,10 @@ class FluentScout:
         self._allowed_personalities = supported_personalities if supported_personalities is not None else ["scout"]
         self._setup_bundles()
 
+    def supports_locale(self, locale: Locale | str, personality: Optional[str] = None) -> bool:
+        personality = personality if personality is not None else self.fallback_personality
+        return self._personalities[personality].supports(locale)
+
     def check_supported(self, msg_id: str, *, locale: str, personality: Optional[str] = None) -> bool:
         """Checks if the msg_id is supported with the given locale and personality.
 
@@ -261,6 +265,9 @@ class ScoutTranslator(Translator):
         personality = personality if personality is not None else self._personality
         return self._localization.format_value(string.message, locale=str(locale), personality=personality,
                                                args=string.extras)
+
+    def supports_locale(self, locale: Locale | str, personality: Optional[str] = None) -> bool:
+        return self._localization.supports_locale(locale, personality)
 
     async def check_supported(self, string: str, locale: Locale | str, personality: Optional[str] = None) -> bool:
         return self._localization.check_supported(string, locale=locale, personality=personality)
