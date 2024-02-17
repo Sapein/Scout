@@ -61,7 +61,7 @@ class GuildNotFound(NotFound):
     pass
 
 
-class MeaningNotFound(NotFound):
+class AssociationNotFound(NotFound):
     """
     This is raised if a meaning is not found in the DB.
     """

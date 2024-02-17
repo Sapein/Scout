@@ -4,7 +4,7 @@ This is a more 'high level' of sorts DB interface.
 from functools import wraps
 from typing import Optional, cast, Any
 
-from sqlalchemy import create_engine, select, or_, inspect
+from sqlalchemy import create_engine, select, or_, inspect, StaticPool
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,12 @@ def db_connect(dialect: str, driver: Optional[str], table: Optional[str], login:
                      host=cast(Optional[str], connect.get('host', None)),
                      port=cast(Optional[int], connect.get('port', None)),
                      database=table)
-    return create_engine(uri)
+    if dialect.casefold() == "sqlite" and (table is None or not table):
+        return create_engine("sqlite://",
+                             connect_args={'check_same_thread': False},
+                             poolclass=StaticPool)
+    else:
+        return create_engine(uri)
 
 
 def readd(obj: Any, session: Session) -> object:
@@ -37,6 +42,9 @@ def readd(obj: Any, session: Session) -> object:
 
 
 def register_user(user_snowflake: int, *, session: Session) -> models.User:
+    if user := session.scalar(select(models.User).where(models.User.snowflake == user_snowflake)):
+        return user
+
     new_user = models.User(snowflake=user_snowflake)
     session.add(new_user)
     return new_user
@@ -144,30 +152,30 @@ def remove_role(role: int | models.Role, *, snowflake_only=False, session: Sessi
     session.delete(role)
 
 
-def add_role_meaning(meaning: str, *, session: Session):
-    new_meaning = models.Meaning(meaning=meaning.casefold())
-    session.add(new_meaning)
-    return new_meaning
+def add_role_association(association: str, *, session: Session):
+    new_association = models.Association(association=association.casefold())
+    session.add(new_association)
+    return new_association
 
 
-def register_role_meaning(meaning: str, *, session: Session) -> models.Meaning:
+def register_role_association(association: str, *, session: Session) -> models.Association:
     """
     Role Meanings
     """
-    if (meaning_db := get_meaning(meaning, session=session)) is not None:
-        return meaning_db
-    return add_role_meaning(meaning, session=session)
+    if (association_db := get_association(association, session=session)) is not None:
+        return association_db
+    return add_role_association(association, session=session)
 
 
-def link_role_meaning(role: models.Role, meaning: models.Meaning,
-                      *, session: Session) -> tuple[models.Role, models.Meaning]:
-    readd(meaning, session)
+def link_role_association(role: models.Role, association: models.Association,
+                      *, session: Session) -> tuple[models.Role, models.Association]:
+    readd(association, session)
     readd(role, session)
 
-    role.meanings.add(meaning)
-    meaning.roles.add(role)
+    role.assocations.add(association)
+    association.roles.add(role)
 
-    return role, meaning
+    return role, association
 
 
 def get_user(user: int, *, snowflake_only=False, session: Session) -> Optional[models.User]:
@@ -197,9 +205,9 @@ def get_role(role: int, *, snowflake_only=False, session: Session) -> Optional[m
     return session.scalar(select(models.Role).where(or_(models.Role.id == role, models.Role.snowflake == role)))
 
 
-def get_meaning(meaning: int | str, *, session: Session) -> Optional[models.Meaning]:
+def get_association(association: int | str, *, session: Session) -> Optional[models.Association]:
     return session.scalar(
-        select(models.Meaning).where(or_(models.Meaning.id == meaning, models.Meaning.meaning == meaning)))
+        select(models.Association).where(or_(models.Association.id == association, models.Association.association == association)))
 
 
 def update_role(role: int | models.Role, new_snowflake: int, *, snowflake_only=False, session: Session) -> models.Role:
@@ -213,7 +221,7 @@ def update_role(role: int | models.Role, new_snowflake: int, *, snowflake_only=F
     return role
 
 
-def get_guildrole_with_meaning(guild: int | models.Guild, meaning: int | str | models.Meaning,
+def get_guildrole_with_association(guild: int | models.Guild, association: int | str | models.Association,
                                *, snowflake_only=True, session: Session) -> Optional[models.Role]:
     if not isinstance(guild, models.Guild):
         guild_db = get_guild(guild, snowflake_only=snowflake_only, session=session)
@@ -221,17 +229,17 @@ def get_guildrole_with_meaning(guild: int | models.Guild, meaning: int | str | m
             raise Scout.database.exceptions.GuildNotFound("Guild does not exist!")
         guild = guild_db
 
-    if not isinstance(meaning, models.Meaning):
-        meaning_db = get_meaning(meaning, session=session)
-        if meaning_db is None:
-            raise Scout.database.exceptions.MeaningNotFound("Meaning does not exist!")
-        meaning = meaning_db
+    if not isinstance(association, models.Association):
+        association_db = get_association(association, session=session)
+        if association_db is None:
+            raise Scout.database.exceptions.AssociationNotFound("Meaning does not exist!")
+        association = association_db
 
     query = (select(models.Role)
              .where(models.Role.guild == guild)
-             .join(models.role_meaning)
-             .join(models.Meaning)
-             .where(models.Meaning == meaning)  # type: ignore
+             .join(models.role_associations)
+             .join(models.Association)
+             .where(models.Association == association)  # type: ignore
              .distinct())
 
     return session.scalar(query)
@@ -299,8 +307,7 @@ def get_server_locale_with_priority(guild: int | models.Guild, priority: int,
     return session.scalar(select(models.GuildLocale)  # type: ignore
                           .where(models.GuildLocale.guild_id == guild.id)
                           .where(models.GuildLocale.priority == priority)
-                          .distinct()
-                          .all())
+                          .distinct())
 
 
 def get_server_locale_with_language(guild: int | models.Guild, locale: str,
@@ -314,5 +321,4 @@ def get_server_locale_with_language(guild: int | models.Guild, locale: str,
     return session.scalar(select(models.GuildLocale)  # type: ignore
                           .where(models.GuildLocale.guild_id == guild.id)
                           .where(models.GuildLocale.locale == locale)
-                          .distinct()
-                          .all())
+                          .distinct())

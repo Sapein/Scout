@@ -1,8 +1,8 @@
-class InvalidMeaning(Exception):
+class InvalidAssociation(Exception):
     pass
 
 
-class MeaningRegistered(Exception):
+class AssociationRegistered(Exception):
     pass
 
 
@@ -26,7 +26,7 @@ class NoGuilds(Exception):
     pass
 
 
-class NoMeanings(Exception):
+class NoAssociations(Exception):
     pass
 
 

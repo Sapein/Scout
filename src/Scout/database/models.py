@@ -1,5 +1,5 @@
 """This is the database mappings for Scout to use."""
-from typing import Optional
+from typing import Optional, Any
 
 import sqlalchemy.sql.functions
 from datetime import datetime
@@ -22,10 +22,10 @@ guild_region = Table(
     Column("guild_id", ForeignKey("guilds.id"), primary_key=True)
 )
 
-role_meaning = Table(
-    "role_meanings",
+role_associations = Table(
+    "role_associations",
     Base.metadata,
-    Column("meaning_id", ForeignKey("meanings.id"), primary_key=True),
+    Column("association_id", ForeignKey("associations.id"), primary_key=True),
     Column("role_id", ForeignKey("roles.id"), primary_key=True)
 )
 
@@ -53,7 +53,7 @@ class User(Base):
 
     names: Mapped[set["UserNames"]] = relationship(back_populates="user", cascade="save-update, merge, delete")
     nations: Mapped[set["Nation"]] = relationship(secondary=user_nation, back_populates="users",
-                                                  cascade="save-update, merge, delete")
+                                                        cascade="save-update, merge, delete")
 
     locales: Mapped[set["UserLocale"]] = relationship(back_populates="user", cascade="save-update, merge, delete")
 
@@ -65,7 +65,7 @@ class Guild(Base):
         id: The primary key and id of the Guild in the database.
         snowflake: The guild's discord snowflake
         override_discord_locale: If this is True then the bot will always prefer the guild's set locale.
-        restrict_user_locales: If enabled on the guild, the bot will only respond in the guild's locales.
+        override_user_locales: If enabled on the guild, the bot will only respond in the guild's locales.
 
         regions: A set of all regions that are associated with the Guild.
         roles: A set of all roles that Scout uses/manages.
@@ -85,7 +85,12 @@ class Guild(Base):
 
     locales: Mapped[set["GuildLocale"]] = relationship(back_populates="guild", cascade="save-update, merge, delete")
 
+
 class Role(Base):
+    def __init__(self, **kw: Any):
+        super().__init__(kw)
+        self.assocations = None
+
     """Represents the role table in the database
 
     Attributes:
@@ -93,7 +98,7 @@ class Role(Base):
         snowflake: The role's discord snowflake.
         guild_id: The guild the role is associated with.
         guild: The guild associated with the role.
-        meanings: The 'meanings' associated with the role.
+        associations: The 'associations' for the role.
     """
     __tablename__ = "roles"
 
@@ -102,53 +107,71 @@ class Role(Base):
 
     guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"))
 
-    meanings: Mapped[set["Meaning"]] = relationship(secondary=role_meaning, back_populates="roles")
+    associations: Mapped[set["Association"]] = relationship(secondary=role_associations, back_populates="roles")
     guild: Mapped["Guild"] = relationship(back_populates="roles")
 
 
-class Meaning(Base):
-    """Represents the meanings table in the database.
+class Association(Base):
+    """Represents the association table in the database.
 
-    Meanings are basically just ways to tie why/what is being tracked with each role. These are handled by cogs/plugins.
+    Associations are used to allow plugins to associate roles with internal information. These are handled by cogs/plugins/extensions.
 
     Attributes:
         id: The primary key and id of the role in the database.
-        meaning: The meaning provided. This is just a string.
-        roles: A set of roles associated with any given meaning.
+        association: The association provided. This is just a string.
+        roles: A set of roles associated with any given association.
     """
-    __tablename__ = "meanings"
+    __tablename__ = "associations"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
-    meaning: Mapped[str] = mapped_column(Text)
+    association: Mapped[str] = mapped_column(Text)
 
-    roles: Mapped[set["Role"]] = relationship(secondary=role_meaning, back_populates="meanings",
+    roles: Mapped[set["Role"]] = relationship(secondary=role_associations, back_populates="associations",
                                               cascade="save-update, merge, delete")
 
 
+class NationOwnershipInformation(Base):
+    """Representation of nations on NationStates, and their data.
+
+    Attributes:
+        id: The primary key of the table.
+
+        private: Whether the nation should automatically grant roles and whether it should be visible or not.
+        added_on: When the nation was added to the database.
+    """
+    __tablename__ = "nation_ownership_information"
+    id: Mapped[int] = mapped_column(ForeignKey("nations.id"), primary_key=True)
+    private: Mapped[bool] = mapped_column(default=False)
+    added_on: Mapped[datetime] = mapped_column(server_default=sqlalchemy.sql.functions.now())
+
+    nation: Mapped["Nation"] = relationship(back_populates="verify_information")
+
+
 class Nation(Base):
-    """Representations of the NationStates nation in the database.
+    """Representations of NationStates nations in the database.
 
     Attributes:
         id: The primary key and id of the Nation in our database.
         name: The name of the Nation in our database.
-        private: Whether the nation should automatically grant roles and whether it should be visible or not.
-        added_on: When the nation was added to the database.
+        last_updated: The timestamp of when the nation information was last updated.
+        data: NationStates data in JSON form.
         region_id: The id of the Region in the database the nation is in.
 
         users: The users that have identified as this nation.
         region: The region that the nation is in.
+        verify_information: Information based on NationStates Verify Options and Information.
     """
     __tablename__ = "nations"
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     name: Mapped[str] = mapped_column(index=True, unique=True)
-    private: Mapped[bool] = mapped_column(default=False)
-    added_on: Mapped[datetime] = mapped_column(server_default=sqlalchemy.sql.functions.now())
-
+    last_updated: Mapped[datetime] = mapped_column(server_default=sqlalchemy.sql.functions.now())
+    data: Mapped[dict[str, Any]]
     region_id: Mapped[int] = mapped_column(ForeignKey("regions.id"))
 
     users: Mapped[set["User"]] = relationship(secondary=user_nation, back_populates="nations")
     region: Mapped["Region"] = relationship(back_populates="nations")
+    verify_information: Mapped["NationOwnershipInformation"] = relationship(back_populates="nation")
 
 
 class Region(Base):
@@ -157,6 +180,8 @@ class Region(Base):
     Attributes:
         id: The primary key and id of the region in our database.
         name: The name of the region in our database.
+        last_updated: The timestamp of when the region information was last updated.
+        data: The nationstates data of that region.
         nations: The set of nations that the bot knows about that are in the region.
         guilds: The set of guilds that a region is associated with.
     """
@@ -164,9 +189,11 @@ class Region(Base):
 
     id: Mapped[int] = mapped_column(Identity(increment=1), primary_key=True)
     name: Mapped[str] = mapped_column(index=True, unique=True)
+    last_updated: Mapped[datetime] = mapped_column(server_default=sqlalchemy.sql.functions.now())
+    data: Mapped[dict[str, Any]]
 
     nations: Mapped[set["Nation"]] = relationship(back_populates="region",
-                                                  cascade="save-update, merge, delete, delete-orphan")
+                                                        cascade="save-update, merge, delete, delete-orphan")
     guilds: Mapped[set["Guild"]] = relationship(secondary=guild_region, back_populates="regions")
 
 
@@ -205,6 +232,7 @@ class UserLocale(Base):
     priority: Mapped[int] = mapped_column(primary_key=True)
 
     user: Mapped["User"] = relationship(back_populates="locales")
+
 
 class GuildLocale(Base):
     """Representation of the guild set locales by the bot.

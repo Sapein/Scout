@@ -2,21 +2,22 @@
 This module contains all the stuff for NSVerify Functionality.
 """
 import asyncio
+import datetime
 from typing import Optional, Any
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import Scout.exceptions
 from Scout.database import db, models
-from Scout.ns_api import ns
+import Scout.nsapi.ns as ns
 from Scout.core.nationstates import __VERSION__
-from Scout.ns_api.nation import Nation
+from Scout.database.models import Region
 
-VERIFIED = "verified"
-RESIDENT = "resident"
+VERIFIED = "NSVerify:user-verified"
+RESIDENT = "NSVerify:user-resident"
 
 utc = datetime.timezone.utc
 time = datetime.time(hour=6, minute=00, tzinfo=utc)
@@ -29,20 +30,21 @@ class NSVerify(commands.Cog):
         ns_client: The ns_client used for ns-api queries.
         users_verifying: The users currently attempting to verify themselves.
     """
-    ns_client: ns.NationStatesClient
+    ns_client: ns.NationStates_Client
+    user_agent: Optional[str]
     users_verifying: dict[Any, Any] = {}
 
-    def __init__(self, bot):
+    def __init__(self, bot, ns_client):
         """Initalizes the cog.
 
         Args:
             bot: The DiscordBot object.
         """
         self.scout = bot
-        self.scout.register_meaning("verified", suppress_error=True)
-        self.scout.register_meaning("resident", suppress_error=True)
+        self.scout.register_association(VERIFIED)
+        self.scout.register_association(RESIDENT)
         self.update_nations.start()
-
+        self.ns_client = ns_client
 
     @tasks.loop(time=time)
     async def update_nations(self):
@@ -58,9 +60,7 @@ class NSVerify(commands.Cog):
         user_agent = ns.create_user_agent(self.scout.config["CONTACT_INFO"],
                                           self.scout.config["NATION"],
                                           self.scout.config["REGION"])
-        user_agent = "NSVerify-Cog/{} {}".format(__VERSION__, user_agent)
-        self.ns_client = await ns.NationStatesClient(self.scout.reusable_session,
-                                                     user_agent=user_agent).build()
+        self.user_agent = "NSVerify-Cog/{} {}".format(__VERSION__, user_agent)
 
     async def cog_unload(self) -> None:
         """Things to do when the cog is unloaded/at bot shutdown.
@@ -69,7 +69,7 @@ class NSVerify(commands.Cog):
 
     def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                    guild: discord.Guild, overwrite: Optional[bool] = False) -> str:
-        """Links the discord roles to the actual meaning for a server.
+        """Links the discord roles to the actual association for a server.
 
         Args:
             verified_role: The role to use as the basic verified role, if not included a verified role will not be added.
@@ -119,11 +119,10 @@ class NSVerify(commands.Cog):
             verified_role: The discord role to use as the verified with the bot role.
             resident_role: The discord role to use as the resident bot role.
         """
-        region = await self.ns_client.get_region(region_name)
         with Session(self.scout.engine) as session:
-            new_region = db.register_region(region.name, session=session)
+            region = session.scalar(select(Region).where(Region.name == region_name.casefold()))
             new_guild = db.register_guild(guild_snowflake=ctx.guild.id, session=session)
-            db.link_guild_region(new_guild, new_region, session=session)
+            db.link_guild_region(new_guild, region, session=session)
             session.commit()  # flush?
 
             try:
@@ -142,7 +141,7 @@ class NSVerify(commands.Cog):
                 await ctx.send("Looks like you don't have a region associated with this server!")
             except Scout.exceptions.InvalidRole:
                 await ctx.send("Oh no, I rolled a Nat 1! I can't currently add that role!")
-            except Scout.exceptions.InvalidMeaning:
+            except Scout.exceptions.InvalidAssociation:
                 await ctx.send("Oh no, I've lost my notes! I can't currently add roles!")
             except Scout.exceptions.RoleOverwrite:
                 await ctx.send(
@@ -160,8 +159,7 @@ class NSVerify(commands.Cog):
             region_name: The name of the region to unlink from the server.
         """
         with Session(self.scout.engine) as session:
-            ns_region = await self.ns_client.get_region(region_name.replace(" ", "_"))
-            region = db.get_region(ns_region.name, session=session)
+            region = db.get_region(region_name.casefold(), session=session)
             guild = db.get_guild(ctx.guild.id, session=session)
 
             if region is not None and guild is not None:
@@ -180,11 +178,12 @@ class NSVerify(commands.Cog):
         """
         await ctx.send("Alrighty! Please check your DMs", ephemeral=True)
         message = await ctx.message.author.send(
-            ("Hi please log into your {} now. After doing so go to this link: {}\n"
+            ("Hi please log into your {} now. After doing so go to this link: "
+             "https://nationstates.net/page=verify_login\n"
              "Copy the code from that page and paste it here.\n"
              "**__This code does not give anyone access to your nation or any control over it. It only allows me "
              "to verify identity__**\n"
-             "Pretty cool, huh?").format(nation, self.ns_client.get_verify_url()))
+             "Pretty cool, huh?").format(nation))
         self.users_verifying[ctx.message.author.name] = (nation, message)
 
         await asyncio.sleep(60)
@@ -203,19 +202,18 @@ class NSVerify(commands.Cog):
             code: If you know what you are doing you can provide the NS Verification Code to directly verify with one command.
             nation: The name of the nation you are verifying with.
         """
-        nation = await self.ns_client.get_nation(nation.replace(" ", "_"))
         with Session(self.scout.engine) as session:
-            if db.get_nation(nation.name, session=session):
+            if db.get_nation(nation, session=session):
                 await ctx.send("That nation has a character sheet already, silly!", ephemeral=True)
                 return
 
         if code is None:
-            await self.verify_dm_flow(ctx, nation.name)
+            await self.verify_dm_flow(ctx, nation)
         else:
             try:
                 message = None
                 async with ctx.typing(ephemeral=True):
-                    res, ns_nation = await self._verify_nation(nation.name, code)
+                    res, ns_nation = await self._verify_nation(nation, code)
                     if res:
                         message = await ctx.send(
                             "Thanks for the character sheet! I'll go ahead and put you in my campaign binder...",
@@ -235,7 +233,7 @@ class NSVerify(commands.Cog):
             except Scout.exceptions.InvalidCode_NSVerify:
                 await ctx.send("Oh no, you didn't role high enough it seems. `{}` isn't the right code!".format(code),
                                ephemeral=True)
-            except (Scout.exceptions.NoGuilds, Scout.exceptions.NoRoles, Scout.exceptions.NoMeanings,
+            except (Scout.exceptions.NoGuilds, Scout.exceptions.NoRoles, Scout.exceptions.NoAssociations,
                     Scout.exceptions.NoNation, Scout.exceptions.NoCode_NSVerify):
                 await ctx.send("There was an internal error...", ephemeral=True)
                 raise
@@ -256,12 +254,13 @@ class NSVerify(commands.Cog):
             await _message.edit(content=res)
 
             async with message.channel.typing():
-                res = await self.scout.register_nation(nation, message)
+                with Session(self.scout.engine) as session:
+                    res = await self.register_nation(nation, message, session=session)
             await _message.edit(content=res)
 
             async with message.channel.typing():
                 del self.users_verifying[message.author.name]
-                await self.scout.give_verified_roles(message.author)
+                await self.give_verified_roles(message.author)
             await _message.edit(content="I've given you roles in all servers I can!")
         except Scout.exceptions.NoCode_NSVerify:
             await _message.edit(content="You need to give me the code")
@@ -270,7 +269,7 @@ class NSVerify(commands.Cog):
                 content="Hmm...{} isn't right. Maybe cast scry and you'll find the right one...".format(Code.args[0]))
         except (Scout.exceptions.NoGuilds, Scout.exceptions.NoRoles):
             await _message.edit(content="I can't give you any roles right now. Thanks for the character-sheet though!")
-        except Scout.exceptions.NoMeanings:
+        except Scout.exceptions.NoAssociations:
             await _message.edit(content="Oh...I don't think I have a roles I can give for that...")
 
     @commands.hybrid_command()  # type: ignore
@@ -284,9 +283,7 @@ class NSVerify(commands.Cog):
         """
         with Session(self.scout.engine) as session:
             user = db.get_user(ctx.author.id, session=session)
-
-            ns_nation = await self.scout.ns_client.get_nation(nation_name)
-            nation = db.get_nation(ns_nation.name, session=session)
+            nation = db.get_nation(nation_name, session=session)
 
             if nation is None or user is None or nation not in user.nations:
                 return
@@ -297,12 +294,6 @@ class NSVerify(commands.Cog):
                 pass
             await self.give_verified_roles(ctx.author, session=session)
 
-            if not nation.users:
-                session.delete(nation)
-
-            if not user.nations:
-                session.delete(user)
-
             session.commit()
         await ctx.send("I've removed your character sheet from my campaign notes.")
 
@@ -311,7 +302,7 @@ class NSVerify(commands.Cog):
     @commands.guild_only()
     async def link_roles(self, ctx, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
                          overwrite_roles: Optional[bool] = False):
-        """The command to actually link two roles to the discord server, if you already set the server's region.
+        """The command to actually link two roles to the discord server.
 
         Parameters:
             ctx: The command context.
@@ -336,7 +327,7 @@ class NSVerify(commands.Cog):
             await ctx.send("Looks like you don't have a region associated with this server!")
         except Scout.exceptions.InvalidRole:
             await ctx.send("Oh no, I rolled a Nat 1! I can't currently add that role!")
-        except Scout.exceptions.InvalidMeaning:
+        except Scout.exceptions.InvalidAssociation:
             await ctx.send("Oh no, I've lost my notes! I can't currently add roles!")
         except Scout.exceptions.RoleOverwrite:
             await ctx.send(
@@ -376,7 +367,7 @@ class NSVerify(commands.Cog):
             await ctx.send("You didn't give me any valid roles to remove from notes!...")
 
     @staticmethod
-    async def register_nation(nation: Nation, message: discord.Message, *, session: Session) -> str:
+    async def register_nation(nation: str, message: discord.Message, *, session: Session) -> str:
         """Actually register the 'nation' to the bot.
 
         Parameters:
@@ -387,12 +378,11 @@ class NSVerify(commands.Cog):
         Returns:
             A string to send to user.
         """
-        region = db.get_region(nation.region, session=session)
-        if region is None:
-            region = db.register_region(nation.region, session=session)
+        nation = db.get_nation(nation, session=session)
+        if nation.region is None:
+            raise Scout.exceptions.InvalidGuild
 
         user = db.register_user(message.author.id, session=session)
-        nation = db.register_nation(nation.name, region_info=region, session=session)
         db.link_user_nation(user, nation, session=session)
         return "There we go! I'll see if I can get you some roles..."
 
@@ -466,22 +456,22 @@ class NSVerify(commands.Cog):
 
             eligible_roles = await self.eligible_nsv_role(user, active_guild, session=session)
             ineligible_roles = await self.ineligible_nsv_roles(eligible_roles)
-            eligible_discord = discord.Object(db.get_guildrole_with_meaning(active_guild,
-                                                                            eligible_roles,
-                                                                            session=session).snowflake)
+            eligible_discord = discord.Object(db.get_guildrole_with_association(active_guild,
+                                                                                eligible_roles,
+                                                                                session=session).snowflake)
 
-            ineligible_db = [db.get_guildrole_with_meaning(active_guild, r, session=session)
+            ineligible_db = [db.get_guildrole_with_association(active_guild, r, session=session)
                              for r in ineligible_roles]
             discord_roles = [discord.Object(r.snowflake) for r in ineligible_db if r is not None]
 
             await user.add_roles(eligible_discord)
             await user.remove_roles(*discord_roles)
 
-    async def _verify_nation(self, nation: Nation | str, code: Optional[str]) -> tuple[str, Nation]:
+    async def _verify_nation(self, nation: str, code: Optional[str]) -> tuple[str]:
         if code is None:
             raise Scout.exceptions.NoCode_NSVerify()
 
-        response, nation = await self.ns_client.verify(nation, code)
+        response, nation = await self.ns_client.get_verify(nation, code, user_agent=self.user_agent)
         if not response:
             raise Scout.exceptions.InvalidCode_NSVerify(code)
 
@@ -508,4 +498,4 @@ async def setup(bot):
     """
     setup function to make this module into an extension.
     """
-    await bot.add_cog(NSVerify(bot))
+    await bot.add_cog(NSVerify(bot, bot.ns_client))
