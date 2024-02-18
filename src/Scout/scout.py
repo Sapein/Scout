@@ -66,6 +66,7 @@ class ScoutBot(commands.Bot):
             print(e)
 
         await self.load_extension("Scout.plugins.dice-rolls")
+        await self.load_extension("Scout.plugins.simple-bump-leaderboard")
         await self.tree.sync()
 
     async def translate_response(self, ctx: commands.Context, response: str, **kwargs) -> str:
