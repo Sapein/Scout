@@ -168,7 +168,7 @@ def register_role_association(association: str, *, session: Session) -> models.A
 
 
 def link_role_association(role: models.Role, association: models.Association,
-                      *, session: Session) -> tuple[models.Role, models.Association]:
+                          *, session: Session) -> tuple[models.Role, models.Association]:
     readd(association, session)
     readd(role, session)
 
@@ -207,7 +207,8 @@ def get_role(role: int, *, snowflake_only=False, session: Session) -> Optional[m
 
 def get_association(association: int | str, *, session: Session) -> Optional[models.Association]:
     return session.scalar(
-        select(models.Association).where(or_(models.Association.id == association, models.Association.association == association)))
+        select(models.Association).where(
+            or_(models.Association.id == association, models.Association.association == association)))
 
 
 def update_role(role: int | models.Role, new_snowflake: int, *, snowflake_only=False, session: Session) -> models.Role:
@@ -222,7 +223,7 @@ def update_role(role: int | models.Role, new_snowflake: int, *, snowflake_only=F
 
 
 def get_guildrole_with_association(guild: int | models.Guild, association: int | str | models.Association,
-                               *, snowflake_only=True, session: Session) -> Optional[models.Role]:
+                                   *, snowflake_only=True, session: Session) -> Optional[models.Role]:
     if not isinstance(guild, models.Guild):
         guild_db = get_guild(guild, snowflake_only=snowflake_only, session=session)
         if guild_db is None:

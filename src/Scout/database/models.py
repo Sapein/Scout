@@ -87,10 +87,6 @@ class Guild(Base):
 
 
 class Role(Base):
-    def __init__(self, **kw: Any):
-        super().__init__(kw)
-        self.assocations = None
-
     """Represents the role table in the database
 
     Attributes:

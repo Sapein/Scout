@@ -3,7 +3,7 @@ The main module for Scout.
 
 This contains all the main 'logic' for the Discord Bot part of things.
 """
-
+import logging
 from typing import Optional, Any, Literal
 
 import aiohttp
@@ -11,12 +11,12 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import Context
 from returns.result import Result, Success, Failure, safe
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 import Scout
 from Scout import config
-from Scout.database import db
+from Scout.database import db, models
 from Scout.database.base import Base
 from Scout.exceptions import *
 from Scout.localization import ScoutTranslator
@@ -36,7 +36,7 @@ class ScoutBot(commands.Bot):
     config: dict[str, Any]
     engine: Engine
     reusable_session: aiohttp.ClientSession
-    meanings: dict[str, int] = {}
+    associations: dict[str, int] = {}
     ns_client: ns.NS_API_Client
     translator: ScoutTranslator
 
@@ -60,8 +60,7 @@ class ScoutBot(commands.Bot):
                                               self.config["NATION"],
                                               self.config["REGION"])
             self.ns_client = ns.NationStates_Client(user_agent, self.reusable_session)
-            # await self.load_extension("Scout.core.nationstates.nationstates")
-            # await self.load_extension("Scout.core.nationstates.nsverify")
+            await self.load_extension("Scout.core.nationstates.nationstates")
         except Exception as e:
             print(e)
 
@@ -207,16 +206,20 @@ class ScoutBot(commands.Bot):
                 # noinspection PyArgumentList
                 return self.register_association(association, session=session)
 
-        if association in self.meanings:
+        if association in self.associations:
             return Failure(AssociationRegistered(association))
 
-        meaning_db = db.register_role_association(association, session=session)
+        association_db = session.scalar(select(models.Association)
+                                        .where(models.Association.association == association.casefold()))
+        if association_db is None:
+            association_db = models.Association(association=association.casefold())
+            session.add(association_db)
         session.commit()
-        self.meanings[association] = meaning_db.id
+        self.associations[association] = association_db.id
         return association
 
     @safe
-    async def register_meaning_async(self, association: str, *, session: Optional[Session] = None):
+    async def register_association_async(self, association: str, *, session: Optional[Session] = None):
         """An async wrapper around register_meaning.
 
         This is just a wrapper around the regular register_meaning function for the time being.
@@ -424,5 +427,5 @@ async def unload_all_ext(ctx: Context):
         loaded.append(ext)
     await ctx.send("Unloaded Extensions:\n{}".format("\n".join(loaded)))
 
-
+logging.getLogger("discord.cogs").setLevel(logging.DEBUG)
 scout.run(scout.config["DISCORD_API_KEY"])

@@ -1,5 +1,6 @@
 import asyncio
 import gzip
+import urllib.parse
 import typing
 from collections import OrderedDict
 from collections.abc import Callable
@@ -92,7 +93,7 @@ class NationStates_Client:
                                                                  self.api_version),
                 headers=headers,
                 limiter=self.limiter)
-        return await asyncio.to_thread(xmltodict.parse,xml_input=response)["NATION"]
+        return (await asyncio.to_thread(xmltodict.parse,xml_input=response))["NATION"]
 
     async def get_region(self, region_name: str, shards: Optional[list[str]], *, user_agent: Optional[str] = None) -> OrderedDict[str, Any] | Any:
         headers = {"User-Agent": user_agent} if user_agent is not None else None
@@ -103,7 +104,7 @@ class NationStates_Client:
                                                                         self.api_version),
                                             headers=headers,
                                             limiter=self.limiter)
-        return await asyncio.to_thread(xmltodict.parse, xml_input=response)["REGION"]
+        return (await asyncio.to_thread(xmltodict.parse, xml_input=response))["REGION"]
 
     async def get_world(self, shards: list[str], *, user_agent: Optional[str]) -> OrderedDict[str, Any] | Any:
         headers = {"User-Agent": user_agent} if user_agent is not None else None
@@ -128,12 +129,11 @@ class NationStates_Client:
     async def get_verify(self, nation_name: str, code: str, *, user_agent: Optional[str] = None) -> bool:
         headers = {"User-Agent": user_agent} if user_agent is not None else None
         response = await self._make_request("{}a=verify&nation={}&checksum={}".format(self.nationstates_api_url,
-                                                                                      nation_name, code),
+                                                                                      urllib.parse.quote(nation_name), code),
                                             headers=headers,
                                             limiter=self.limiter)
-        response = "<VERIFY>{}</VERIFY>".format(bool(int(response)))
         try:
-            return bool(int(response))
+            return bool(int(response.strip()))
         except (TypeError, ValueError):
             return False
 

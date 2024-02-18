@@ -3,6 +3,7 @@ This module contains all the stuff for NSVerify Functionality.
 """
 import asyncio
 import datetime
+import logging
 from typing import Optional, Any
 
 import discord
@@ -14,13 +15,14 @@ import Scout.exceptions
 from Scout.database import db, models
 import Scout.nsapi.ns as ns
 from Scout.core.nationstates import __VERSION__
-from Scout.database.models import Region
+from Scout.database.models import Region, User, Nation, user_nation
 
 VERIFIED = "NSVerify:user-verified"
 RESIDENT = "NSVerify:user-resident"
 
 utc = datetime.timezone.utc
-time = datetime.time(hour=6, minute=00, tzinfo=utc)
+time = datetime.time(hour=8, minute=00, tzinfo=utc)
+logger = logging.getLogger("discord.cogs.core.nationstates.nsverify")
 
 
 class NSVerify(commands.Cog):
@@ -46,13 +48,15 @@ class NSVerify(commands.Cog):
         self.update_nations.start()
         self.ns_client = ns_client
 
-    @tasks.loop(time=time)
+    # @tasks.loop(time=time)
+    @tasks.loop(count=1)
     async def update_nations(self):
         """Handle the automatic update of nations.
         """
-        # Download Update Information
-        # Parse Update Information
-        pass
+        with Session(self.scout.engine) as session:
+            for user in self.scout.get_all_members():
+                if session.scalar(select(User).where(User.snowflake == user.id).join(user_nation)) is not None:
+                    await self.give_verified_roles(user, None, session=session)
 
     async def cog_load(self):
         """The function that the bot runs when the Cog is loaded.
@@ -67,8 +71,8 @@ class NSVerify(commands.Cog):
         """
         self.update_nations.stop()
 
-    def link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
-                   guild: discord.Guild, overwrite: Optional[bool] = False) -> str:
+    def _link_roles(self, verified_role: Optional[discord.Role], resident_role: Optional[discord.Role],
+                    guild: discord.Guild, overwrite: Optional[bool] = False) -> str:
         """Links the discord roles to the actual association for a server.
 
         Args:
@@ -90,10 +94,53 @@ class NSVerify(commands.Cog):
             raise Scout.exceptions.NoRoles()
 
         with Session(self.scout.engine) as session:
-            guild = db.get_guild(guild.id, session=session)
+            guild = session.scalar(select(models.Guild).where(models.Guild.snowflake == guild.id))
+            # noinspection DuplicatedCode
             if resident_role is not None:
-                self.scout.add_role(resident_role, guild, RESIDENT.casefold(), override=overwrite, session=session)
+                association = session.scalar(select(models.Association)
+                                             .where(models.Association.id == self.scout.associations[RESIDENT]))
 
+                role = models.Role(snowflake=resident_role.id, guild_id=guild.id)
+
+                associated_role = session.scalar(select(models.Role)
+                                                 .join(models.role_associations)
+                                                 .join(models.Association)
+                                                 .where(models.Association.id == self.scout.associations[RESIDENT])
+                                                 .where(models.Role.guild_id == guild.id))
+
+                if associated_role is not None and not overwrite:
+                    raise Scout.exceptions.RoleOverwrite()
+                elif associated_role is not None and overwrite:
+                    role.associations.add(association)
+                    session.delete(associated_role)
+                    session.add(role)
+                else:
+                    role.associations.add(association)
+                    session.add(role)
+            # noinspection DuplicatedCode
+            if verified_role is not None:
+                association = session.scalar(select(models.Association)
+                                             .where(models.Association.id == self.scout.associations[VERIFIED]))
+
+                role = models.Role(snowflake=verified_role.id, guild_id=guild.id)
+
+                associated_role = session.scalar(select(models.Role)
+                                                 .join(models.role_associations)
+                                                 .join(models.Association)
+                                                 .where(models.Association.id == self.scout.associations[VERIFIED])
+                                                 .where(models.Role.guild_id == guild.id))
+
+                if associated_role is not None and not overwrite:
+                    raise Scout.exceptions.RoleOverwrite()
+                elif associated_role is not None and overwrite:
+                    role.associations.add(association)
+                    session.delete(associated_role)
+                    session.add(role)
+                else:
+                    role.associations.add(association)
+                    session.add(role)
+
+            session.commit()
         if verified_role is not None and resident_role is not None:
             return ("A Natural 20, a critical success! I've obtained the mythical +1 roles of {} and {}!"
                     ).format(verified_role.name, resident_role.name)
@@ -121,15 +168,19 @@ class NSVerify(commands.Cog):
         """
         with Session(self.scout.engine) as session:
             region = session.scalar(select(Region).where(Region.name == region_name.casefold()))
-            new_guild = db.register_guild(guild_snowflake=ctx.guild.id, session=session)
-            db.link_guild_region(new_guild, region, session=session)
+            new_guild = session.scalar(select(models.Guild).where(models.Guild.snowflake == ctx.guild.id))
+            if new_guild is None:
+                new_guild = models.Guild(snowflake=ctx.guild.id)
+                session.add(new_guild)
+            if region not in new_guild.regions:
+                new_guild.regions.add(region)
             session.commit()  # flush?
 
             try:
-                self.link_roles(verified_role, resident_role, ctx.message, overwrite=False)
+                self._link_roles(verified_role, resident_role, ctx.guild)
                 await ctx.send("The region has been registered to this server along with the roles!")
 
-                users = session.scalars(select(models.User.snowflake)).all()
+                users = session.scalars(select(User.snowflake)).all()
                 if users:
                     members = await ctx.guild.query_members(user_ids=users)
                     for member in members:
@@ -164,7 +215,8 @@ class NSVerify(commands.Cog):
 
             if region is not None and guild is not None:
                 if region in guild.regions:
-                    db.unlink_guild_region(guild, region, session=session)
+                    guild.regions.remove(region)
+                    session.commit()
                     return await ctx.send("I've removed this region from my maps!")
                 return await ctx.send("I couldn't find that region...")
             await ctx.send("I couldn't find that region or guild...")
@@ -245,7 +297,7 @@ class NSVerify(commands.Cog):
         Arguments:
             message: The discord message that triggered this.
         """
-        if message.guild is not None or message.author.name in self.users_verifying:
+        if message.guild is not None or message.author.name not in self.users_verifying:
             return
         (nation, _message) = self.users_verifying[message.author.name]
         try:
@@ -312,10 +364,10 @@ class NSVerify(commands.Cog):
             overwrite_roles: If this is set, then the bot will replace any previously configured roles.
         """
         try:
-            await ctx.send(self.link_roles(verified_role, resident_role, ctx.message, overwrite=overwrite_roles))
+            await ctx.send(self._link_roles(verified_role, resident_role, ctx.guild, overwrite=overwrite_roles))
 
             with Session(self.scout.engine) as session:
-                users = session.scalars(select(models.User.snowflake)).all()
+                users = session.scalars(select(User.snowflake)).all()
                 if users:
                     members = await ctx.guild.query_members(user_ids=users)
                     for member in members:
@@ -350,12 +402,27 @@ class NSVerify(commands.Cog):
         unlinked_roles: list[discord.Role] = []
 
         # Note: Check the remove_role function
-        if verified_role and (res := self.scout.remove_role(verified_role)) is not None:
-            unlinked_roles.append(res)
-
-        # Note: Check the remove_role function
-        if resident_role and (res := self.scout.remove_role(resident_role)) is not None:
-            unlinked_roles.append(res)
+        with Session(self.scout.engine) as session:
+            guild_id = session.scalar(select(models.Guild).where(models.Guild.snowflake == ctx.guild.id)).id
+            if verified_role:
+                unlinked_roles.append(verified_role)
+                role = session.scalar(select(models.Role)
+                                      .join(models.role_associations)
+                                      .join(models.Association)
+                                      .where(models.Association.id == self.scout.associations[VERIFIED])
+                                      .where(models.Role.guild_id == guild_id))
+                if role is not None:
+                    session.delete(role)
+            if resident_role:
+                unlinked_roles.append(resident_role)
+                role = session.scalar(select(models.Role)
+                                      .join(models.role_associations)
+                                      .join(models.Association)
+                                      .where(models.Association.id == self.scout.associations[RESIDENT])
+                                      .where(models.Role.guild_id == guild_id))
+                if role is not None:
+                    session.delete(role)
+            session.commit()
 
         if remove_roles:
             for role in unlinked_roles:
@@ -366,29 +433,41 @@ class NSVerify(commands.Cog):
         else:
             await ctx.send("You didn't give me any valid roles to remove from notes!...")
 
-    @staticmethod
-    async def register_nation(nation: str, message: discord.Message, *, session: Session) -> str:
+    async def register_nation(self, nation_name: str, message: discord.Message, *, session: Session) -> str:
         """Actually register the 'nation' to the bot.
 
         Parameters:
-            nation: The NS Nation to use.
+            nation_name: The NS Nation to use.
             message: The message to use for responses.
             session: The database session.
 
         Returns:
             A string to send to user.
         """
-        nation = db.get_nation(nation, session=session)
-        if nation.region is None:
-            raise Scout.exceptions.InvalidGuild
+        nation = db.get_nation(nation_name.casefold(), session=session)
+
+        if nation is None:
+            nation = await self.ns_client.get_nation(nation_name, shards=None, user_agent=self.user_agent)
+            region = db.get_region(nation["REGION"].casefold(), session=session)
+
+            if region is None:
+                region = await self.ns_client.get_region(nation["REGION"], shards=None, user_agent=self.user_agent)
+                region = Region(name=region["NAME"].casefold(), data=region)
+                session.add(region)
+
+            nation = Nation(name=nation["NAME"].casefold(),
+                            data=nation,
+                            region=region)
+            session.add(nation)
 
         user = db.register_user(message.author.id, session=session)
         db.link_user_nation(user, nation, session=session)
+        session.commit()
         return "There we go! I'll see if I can get you some roles..."
 
     @staticmethod
     async def eligible_nsv_role(user: discord.Member, guild: models.Guild, session: Session) -> str | None:
-        """Determine what roles the user is elligble for in the given server.
+        """Determine what roles the user is eligible for in the given server.
 
         Parameters:
             user: The discord user
@@ -426,7 +505,7 @@ class NSVerify(commands.Cog):
     async def give_verified_roles(self, user: discord.User | discord.Member, guild: Optional[discord.Guild] = None,
                                   *, session: Session):
         if not session.scalars(select(models.Role)).all():
-            raise Scout.exceptions.NoRoles()
+            return
 
         user_db = db.get_user(user.id, session=session)
         if user_db is None or not user_db.nations:
@@ -439,11 +518,11 @@ class NSVerify(commands.Cog):
             active_guilds = session.scalars(
                 select(models.Guild).where(models.Guild.snowflake.in_(mutual_guilds.keys()))).all()
             if not active_guilds:
-                raise Scout.exceptions.NoGuilds()
+                return
 
         else:
-            mutual_guilds[guild.id] = user
-            active_guilds = [db.get_guild(guild.id, session=session)]
+            mutual_guilds[guild.id] = (guild, user)
+            active_guilds = [session.scalar(select(models.Guild).where(models.Guild.snowflake == guild.id))]
             active_guilds = [g for g in active_guilds if g is not None]
             if not active_guilds:
                 return
@@ -456,22 +535,31 @@ class NSVerify(commands.Cog):
 
             eligible_roles = await self.eligible_nsv_role(user, active_guild, session=session)
             ineligible_roles = await self.ineligible_nsv_roles(eligible_roles)
-            eligible_discord = discord.Object(db.get_guildrole_with_association(active_guild,
-                                                                                eligible_roles,
-                                                                                session=session).snowflake)
+            eligible_guild_role = session.scalar(select(models.Role)
+                                        .join(models.role_associations)
+                                        .join(models.Association)
+                                        .where(models.Role.guild_id == active_guild.id)
+                                        .where(models.Association.id == self.scout.associations[eligible_roles]))
 
-            ineligible_db = [db.get_guildrole_with_association(active_guild, r, session=session)
-                             for r in ineligible_roles]
+            ineligible_guild_role = lambda a: (select(models.Role)
+                                               .join(models.role_associations)
+                                               .join(models.Association)
+                                               .where(models.Role.guild_id == active_guild.id)
+                                               .where(models.Association.id == self.scout.associations[a]))
+            ineligible_db = [session.scalar(ineligible_guild_role(r))
+                             for r in ineligible_roles if r is not None]
             discord_roles = [discord.Object(r.snowflake) for r in ineligible_db if r is not None]
 
-            await user.add_roles(eligible_discord)
+            if eligible_guild_role is not None:
+                eligible_discord = discord.Object(eligible_guild_role.snowflake)
+                await user.add_roles(eligible_discord)
             await user.remove_roles(*discord_roles)
 
     async def _verify_nation(self, nation: str, code: Optional[str]) -> tuple[str]:
         if code is None:
             raise Scout.exceptions.NoCode_NSVerify()
 
-        response, nation = await self.ns_client.get_verify(nation, code, user_agent=self.user_agent)
+        response = await self.ns_client.get_verify(nation, code, user_agent=self.user_agent)
         if not response:
             raise Scout.exceptions.InvalidCode_NSVerify(code)
 
