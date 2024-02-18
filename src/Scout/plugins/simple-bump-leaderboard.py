@@ -49,6 +49,11 @@ class SimpleBumpLeaderboard(commands.Cog):
         with Session(self.scout.engine) as session:
             top_bumpers = session.scalars(select(BumpLeaderBoard).order_by(BumpLeaderBoard.bump_count.desc()
                                                                            ).limit(limit)).all()
+            if top_bumpers is None or len(top_bumpers) == 0:
+                bumper_embed = Embed(title="Top Server Bumpers!", description="No one is on the leaderboard yet!")
+                await ctx.send(embed=bumper_embed)
+                return
+
             _top_bumpers = top_bumpers
             top_bumpers = [f"{i + 1}. <@{t.user_snowflake}> - {t.bump_count}" for (i, t) in enumerate(top_bumpers)]
             top_bumpers[0] = top_bumpers[0].replace("1.", ":crown:")
