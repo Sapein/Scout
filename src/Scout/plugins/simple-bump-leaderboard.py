@@ -40,7 +40,7 @@ class SimpleBumpLeaderboard(commands.Cog):
             session.add(BumpLog(guild_snowflake=guild_id, user_snowflake=author_id))
             session.commit()
 
-    @commands.hybrid_command()  # type: ignore
+    @commands.hybrid_command(name="bump-leaderboard")  # type: ignore
     async def show_leaderboard(self, ctx, limit: Optional[int] = 10):
         if limit == 0:
             await ctx.send("Limit can not be 0", ephemeral=True)
