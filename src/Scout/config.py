@@ -15,7 +15,7 @@ def default_values() -> dict[str, str]:
     """
     return {
         "CONFIG_FILE": "scout.toml",
-        "PREFIXES": ".:,:I cast :I roll for :i cast: i roll for",
+        "PREFIXES": ".:,:I cast :I roll for :i cast :i roll for ",
         "PREFIXLESS_DMS": "False",
         "PING_PREFIX": "True",
         "DB_DIALECT": "sqlite",
