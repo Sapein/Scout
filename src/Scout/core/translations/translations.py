@@ -74,7 +74,7 @@ class Translations(commands.Cog):
             await ctx.send("Can not set language and fallback language as the same!")
             return
 
-        if not self.scout.translator.supports_locale(language):
+        if language is not None and not self.scout.translator.supports_locale(language):
             await ctx.send(f"Language {language} not supported!")
             return
 
@@ -152,15 +152,15 @@ class Translations(commands.Cog):
                             server.
         """
         if language is not None and language == fallback_language:
-            ctx.send("Can not set language and fallback language as the same!")
+            await ctx.send("Can not set language and fallback language as the same!")
             return
 
-        if not self.scout.translator.supports_locale(language):
-            ctx.send(f"Language {language} not supported!")
+        if language is not None and not self.scout.translator.supports_locale(language):
+            await ctx.send(f"Language {language} not supported!")
             return
 
-        if not self.scout.translator.supports_locale(fallback_language):
-            ctx.send(f"Language {fallback_language} not supported!")
+        if fallback_language is not None and not self.scout.translator.supports_locale(fallback_language):
+            await ctx.send(f"Language {fallback_language} not supported!")
             return
 
         with Session(self.scout.engine) as session:
