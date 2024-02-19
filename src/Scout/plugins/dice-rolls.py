@@ -10,7 +10,7 @@ async def roll(ctx: discord.ext.commands.Context, dice_notation: str):
     """Rolls a dice using dice notation
     """
     try:
-        await ctx.send("Result: {}".format(dice.roll(dice_notation)))
+        await ctx.send("Result of rolling {}: {}".format(dice_notation, dice.roll(dice_notation)))
     except (dice.exceptions.DiceException, dice.exceptions.DiceFatalException) as e:
         logger.error("Unable to roll dice...")
         logger.error(e)
